@@ -3,6 +3,7 @@
 .cache/**
 history.txt
 
+.claude
 logs
 *.log
 npm-debug.log*
