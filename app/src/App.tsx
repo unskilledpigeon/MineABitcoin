@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Toaster } from "sonner";
 import "./App.css";
 import ConnectWallet from "./components/ConnectWallet";
@@ -6,77 +6,22 @@ import RoundStatus from "./components/RoundStatus";
 import BuyHashes from "./components/BuyHashes";
 import RegisterTag from "./components/RegisterTag";
 import MinerDashboard from "./components/MinerDashboard";
-import { STATE_ONGOING, STATE_COOLDOWN, formatSbtcCompact } from "./lib/constants";
+import CooldownOverlay from "./components/CooldownOverlay";
+import { SbtcIcon, UsdcxIcon } from "./components/TokenIcons";
+import { formatSbtcCompact, formatUsdcx, heroTagline } from "./lib/constants";
+import { claimMiningReward, claimMiningRewardDual } from "./lib/stacks";
 import {
-  getRoundInfo,
-  getMinerInfo,
-  getMinerTag,
-  getPendingReward,
-  getReferralEarnings,
-  getTotalWithdrawn,
-  getSharesStats,
-} from "./lib/stacks";
+  useRoundInfo,
+  useSharesStats,
+  useUsdcxPools,
+  useLastMiner,
+  useMinerTag,
+  useMinerData,
+  useInvalidateOnTx,
+} from "./hooks/useQueries";
 
-interface RoundData {
-  round: number;
-  state: number;
-  blocksRemaining: number;
-  blockOverflow: number;
-  totalHashes: number;
-  cpuHashes: number;
-  gpuHashes: number;
-  fpgaHashes: number;
-  asicHashes: number;
-  miningReward: number;
-  miningShares: number;
-  uniqueMiners: number;
-}
-
-interface SharesStats {
-  totalEarned: number;
-  totalPaid: number;
-  paidLastHour: number;
-  paidLastDay: number;
-}
-
-interface MinerData {
-  hashes: number;
-  rig: number;
-}
-
-function parseRoundInfo(raw: Record<string, unknown>): RoundData {
-  const v = raw.value as Record<string, { value: string | { value: string } | null }>;
-  return {
-    round: Number(v.round.value),
-    state: Number(v.state.value),
-    blocksRemaining: Number(v["blocks-remaining"].value),
-    blockOverflow: v["block-overflow"] ? Number(v["block-overflow"].value) : 0,
-    totalHashes: Number(v["total-hashes"].value),
-    cpuHashes: Number(v["cpu-hashes"].value),
-    gpuHashes: Number(v["gpu-hashes"].value),
-    fpgaHashes: Number(v["fpga-hashes"].value),
-    asicHashes: Number(v["asic-hashes"].value),
-    miningReward: Number(v["mining-reward"].value),
-    miningShares: Number(v["mining-shares"].value),
-    uniqueMiners: Number(v["unique-miners"].value),
-  };
-}
-
-function parseMinerInfo(raw: Record<string, unknown>): MinerData | null {
-  console.log("raw miner info:", JSON.stringify(raw));
-  if (!raw.value) return null;
-  // map-get? returns (optional ...) — cvToJSON wraps as { type: "some", value: { ... } }
-  let v = raw.value as Record<string, { value: string }>;
-  // If the value itself has a nested "value" (double-wrapped optional), unwrap it
-  if (v && typeof v === "object" && "value" in v && !("hashes" in v)) {
-    v = v.value as unknown as Record<string, { value: string }>;
-  }
-  if (!v || !("hashes" in v)) return null;
-  return {
-    hashes: Number(v.hashes.value),
-    rig: Number(v.rig.value),
-  };
-}
+const STATE_ONGOING = 1;
+const STATE_COOLDOWN = 2;
 
 function HashRain() {
   const columns = useMemo(() => {
@@ -131,89 +76,24 @@ function App() {
     }
     return saved;
   });
-  const [roundData, setRoundData] = useState<RoundData | null>(null);
-  const [roundLoading, setRoundLoading] = useState(true);
-  const [minerData, setMinerData] = useState<MinerData | null>(null);
-  const [minerTag, setMinerTag] = useState<string | null>(null);
-  const [pendingReward, setPendingReward] = useState(0);
-  const [referralEarnings, setReferralEarnings] = useState(0);
-  const [totalWithdrawn, setTotalWithdrawn] = useState(0);
-  const [sharesStats, setSharesStats] = useState<SharesStats | null>(null);
 
-  const fetchRoundInfo = useCallback(async () => {
-    try {
-      const [raw, rawStats] = await Promise.all([
-        getRoundInfo(),
-        getSharesStats(),
-      ]);
-      setRoundData(parseRoundInfo(raw as Record<string, unknown>));
-      const sv = (rawStats as Record<string, unknown>).value as Record<string, { value: string }>;
-      if (sv) {
-        setSharesStats({
-          totalEarned: Number(sv["total-earned"].value),
-          totalPaid: Number(sv["total-paid"].value),
-          paidLastHour: Number(sv["paid-last-hour"].value),
-          paidLastDay: Number(sv["paid-last-day"].value),
-        });
-      }
-    } catch (err) {
-      console.error("Failed to fetch round info:", err);
-    }
-    setRoundLoading(false);
-  }, []);
+  // TanStack Query hooks — auto-poll every 30s
+  const { data: roundData, isLoading: roundLoading } = useRoundInfo();
+  const { data: sharesStats } = useSharesStats();
+  const { data: usdcxPools } = useUsdcxPools();
+  const hasUsdcxInPools = usdcxPools?.hasAny ?? false;
+  const { data: lastMiner } = useLastMiner();
+  const { data: minerTag } = useMinerTag(address);
+  const { data: minerResult } = useMinerData(address, roundData?.round);
+  const invalidateOnTx = useInvalidateOnTx();
 
-  const fetchMinerTag = useCallback(async () => {
-    if (!address) return;
-    try {
-      const rawTag = await getMinerTag(address);
-      console.log("raw miner tag:", JSON.stringify(rawTag));
-      const tagRaw = rawTag as Record<string, unknown>;
-      let parsedTag: string | null = null;
-      if (tagRaw.value) {
-        const inner = tagRaw.value;
-        if (typeof inner === "string") {
-          parsedTag = inner;
-        } else if (typeof inner === "object" && inner !== null && "value" in inner) {
-          parsedTag = (inner as { value: string }).value;
-        }
-      }
-      setMinerTag(parsedTag);
-    } catch (err) {
-      console.error("Failed to fetch miner tag:", err);
-    }
-  }, [address]);
-
-  const fetchMinerData = useCallback(async () => {
-    if (!address || !roundData) return;
-    try {
-      const [rawMiner, rawReward, rawEarnings, rawWithdrawn] = await Promise.all([
-        getMinerInfo(address, roundData.round),
-        getPendingReward(address),
-        getReferralEarnings(address),
-        getTotalWithdrawn(address),
-      ]);
-      setMinerData(parseMinerInfo(rawMiner as Record<string, unknown>));
-      setPendingReward(Number((rawReward as { value: string }).value));
-      setReferralEarnings(Number((rawEarnings as { value: string }).value));
-      setTotalWithdrawn(Number((rawWithdrawn as { value: string }).value));
-    } catch (err) {
-      console.error("Failed to fetch miner data:", err);
-    }
-  }, [address, roundData]);
-
-  useEffect(() => {
-    fetchRoundInfo();
-    const interval = setInterval(fetchRoundInfo, 30_000);
-    return () => clearInterval(interval);
-  }, [fetchRoundInfo]);
-
-  useEffect(() => {
-    fetchMinerTag();
-  }, [fetchMinerTag]);
-
-  useEffect(() => {
-    fetchMinerData();
-  }, [fetchMinerData]);
+  const minerData = minerResult?.minerData ?? null;
+  const pendingReward = minerResult?.pendingReward ?? 0;
+  const referralEarnings = minerResult?.referralEarnings ?? 0;
+  const referralEarningsUsdcx = minerResult?.referralEarningsUsdcx ?? 0;
+  const totalWithdrawn = minerResult?.totalWithdrawn ?? 0;
+  const unclaimedSbtc = minerResult?.unclaimedSbtc ?? 0;
+  const unclaimedUsdcx = minerResult?.unclaimedUsdcx ?? 0;
 
   function handleConnect(addr: string) {
     setAddress(addr);
@@ -222,24 +102,31 @@ function App() {
 
   function handleDisconnect() {
     setAddress(null);
-    setMinerData(null);
-    setMinerTag(null);
     localStorage.removeItem("stx-address");
   }
 
-  function handleTx(_txId: string) {
-    setTimeout(() => {
-      fetchRoundInfo();
-      fetchMinerTag();
-      fetchMinerData();
-    }, 3000);
+  function handleTx(txId: string) {
+    invalidateOnTx(txId);
   }
 
-  const isOngoing = roundData?.state === STATE_ONGOING;
-  const isCooldown = roundData?.state === STATE_COOLDOWN;
+  const isOngoing = roundData?.state === STATE_ONGOING && (roundData?.blocksRemaining ?? 0) > 0;
+  const isCooldown = (
+    roundData?.state === STATE_COOLDOWN && (roundData?.cooldownBlocksRemaining ?? 0) > 0
+  ) || (
+    roundData?.state === STATE_ONGOING && roundData?.blocksRemaining === 0
+  );
+  const cooldownExpired = roundData?.state === STATE_COOLDOWN && (roundData?.cooldownBlocksRemaining ?? 0) === 0;
+
+  function handleClaimJackpot() {
+    if (hasUsdcxInPools) {
+      claimMiningRewardDual(handleTx);
+    } else {
+      claimMiningReward(handleTx);
+    }
+  }
 
   return (
-    <div className="app">
+    <div className={`app${isCooldown ? " app-cooldown" : ""}`}>
       <Toaster theme="dark" position="top-right" richColors />
       <HashRain />
 
@@ -264,15 +151,32 @@ function App() {
         </div>
       </header>
 
+      {isCooldown && roundData && (
+        <CooldownOverlay
+          winner={lastMiner ?? null}
+          jackpot={roundData.miningReward}
+          jackpotUsdcx={usdcxPools?.miningReward ?? 0}
+          round={roundData.round}
+          address={address}
+          cooldownBlocksRemaining={roundData.cooldownBlocksRemaining}
+          onClaimReward={handleClaimJackpot}
+        />
+      )}
+
       {/* Hero Stats */}
       {roundData && (
         <section className="hero">
           <div className="hero-tagline">
-            Buy hashes. Choose your rig. The <strong>last miner standing</strong> wins the pot.
+            {cooldownExpired
+              ? "A fresh battlefield awaits. Be the first to buy hashes and ignite the next war."
+              : heroTagline(roundData.uniqueMiners, roundData.miningReward, roundData.blocksRemaining)
+            }
           </div>
           <div className="hero-stats">
             <div className="hero-stat">
-              <div className="hero-stat-value">{formatSbtcCompact(roundData.miningReward)}</div>
+              <div className="hero-stat-value">
+                {formatSbtcCompact(roundData.miningReward)} <SbtcIcon size={18} /> / {formatUsdcx(usdcxPools?.miningReward ?? 0)} <UsdcxIcon size={18} />
+              </div>
               <div className="hero-stat-label">Reward Pool</div>
             </div>
             <div className="hero-stat">
@@ -297,14 +201,18 @@ function App() {
 
       <main className="app-main">
         <div className="left-col">
-          <RoundStatus data={roundData} sharesStats={sharesStats} loading={roundLoading} />
+          <RoundStatus data={roundData ?? null} sharesStats={sharesStats ?? null} loading={roundLoading} usdcxMiningReward={usdcxPools?.miningReward ?? 0} usdcxMiningShares={usdcxPools?.miningShares ?? 0} />
           <MinerDashboard
             address={address}
             minerData={minerData}
             pendingReward={pendingReward}
             referralEarnings={referralEarnings}
+            referralEarningsUsdcx={referralEarningsUsdcx}
             totalWithdrawn={totalWithdrawn}
+            unclaimedSbtc={unclaimedSbtc}
+            unclaimedUsdcx={unclaimedUsdcx}
             isCooldown={isCooldown ?? false}
+            hasUsdcxInPools={hasUsdcxInPools}
             onTx={handleTx}
           />
         </div>
@@ -314,7 +222,7 @@ function App() {
             gameOngoing={isOngoing ?? false}
             onTx={handleTx}
           />
-          <RegisterTag address={address} currentTag={minerTag} onTx={handleTx} />
+          <RegisterTag address={address} currentTag={minerTag ?? null} onTx={handleTx} />
         </div>
       </main>
 

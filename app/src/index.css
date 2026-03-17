@@ -282,6 +282,7 @@ input:focus {
   border: 1px solid rgba(247, 147, 26, 0.6);
   font-weight: 700;
   box-shadow: 0 0 20px var(--accent-dim), 0 4px 16px rgba(0, 0, 0, 0.4);
+  text-transform: none;
 }
 .btn-primary:hover {
   background: linear-gradient(135deg, #ffb347, #f7931a, #e87a08);
@@ -294,6 +295,7 @@ input:focus {
   border-color: var(--green);
   color: var(--green);
   box-shadow: 0 0 10px var(--green-dim);
+  text-transform: none;
 }
 .btn-action:hover {
   background: linear-gradient(145deg, rgba(0, 232, 123, 0.2), rgba(0, 232, 123, 0.08));
@@ -384,6 +386,13 @@ input:focus {
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--text-bright);
+}
+
+.token-icon-inline {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 0.15rem;
+  border-radius: 50%;
 }
 
 /* Keyframes */

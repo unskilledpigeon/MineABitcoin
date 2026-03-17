@@ -7,10 +7,22 @@ cache_dir = './.cache'
 
 [[project.requirements]]
 contract_id = 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token'
-[contracts.MineABitcoin]
+
+[contracts.mock-pyth-oracle]
+path = 'contracts/mock-pyth-oracle.clar'
+clarity_version = 3
+epoch = 'latest'
+
+[contracts.mock-usdcx-token]
+path = 'contracts/mock-usdcx-token.clar'
+clarity_version = 3
+epoch = 'latest'
+
+[contracts.MineABitcoin50000]
 path = 'contracts/MineABitcoin.clar'
 clarity_version = 3
 epoch = 'latest'
+
 [repl.analysis]
 passes = ['check_checker']
 

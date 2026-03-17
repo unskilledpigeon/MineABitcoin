@@ -1,10 +1,14 @@
-import { STATE_ONGOING, BLOCKS_PER_ROUND, formatSbtcCompact, rigName } from "../lib/constants";
+import { formatSbtcCompact, formatUsdcx, rigName, roundEra } from "../lib/constants";
+import { SbtcIcon, UsdcxIcon } from "./TokenIcons";
 
 interface RoundData {
   round: number;
   state: number;
   blocksRemaining: number;
+  blocksElapsed: number;
   blockOverflow: number;
+  roundStartHeight: number;
+  currentBlockHeight: number;
   totalHashes: number;
   cpuHashes: number;
   gpuHashes: number;
@@ -13,6 +17,7 @@ interface RoundData {
   miningReward: number;
   miningShares: number;
   uniqueMiners: number;
+  effectiveDuration: number;
 }
 
 interface SharesStats {
@@ -26,6 +31,8 @@ interface Props {
   data: RoundData | null;
   sharesStats: SharesStats | null;
   loading: boolean;
+  usdcxMiningReward: number;
+  usdcxMiningShares: number;
 }
 
 const RIG_COLORS: Record<number, string> = {
@@ -35,18 +42,24 @@ const RIG_COLORS: Record<number, string> = {
   4: "var(--yellow)",
 };
 
-export default function RoundStatus({ data, sharesStats, loading }: Props) {
+// Game states from contract
+const STATE_ONGOING = 1;
+
+export default function RoundStatus({ data, sharesStats, loading, usdcxMiningReward, usdcxMiningShares }: Props) {
   if (loading) return <div className="card">Loading round data...</div>;
   if (!data) return <div className="card">Could not load round data</div>;
 
-  const effectiveDuration = BLOCKS_PER_ROUND + data.blockOverflow;
-  const progress = ((effectiveDuration - data.blocksRemaining) / effectiveDuration) * 100;
-  const isOngoing = data.state === STATE_ONGOING;
+  const total = data.effectiveDuration;
+  const progress = total > 0
+    ? ((total - data.blocksRemaining) / total) * 100
+    : 100;
+  const isOngoing = data.state === STATE_ONGOING && data.blocksRemaining > 0;
+  const era = roundEra(data.round);
 
   return (
     <div className="card round-status">
       <div className="round-header">
-        <h2>Round {data.round}</h2>
+        <h2>{era.title}</h2>
         <span className={`badge ${isOngoing ? "badge-ongoing" : "badge-cooldown"}`}>
           {isOngoing ? "Mining" : "Cooldown"}
         </span>
@@ -57,7 +70,7 @@ export default function RoundStatus({ data, sharesStats, loading }: Props) {
           <div className="progress-fill" style={{ width: `${progress}%` }} />
         </div>
         <div className="progress-label">
-          Halving after {data.blocksRemaining.toLocaleString()} / {effectiveDuration.toLocaleString()} blocks
+          {data.blocksRemaining.toLocaleString()} blocks remaining
           {data.blockOverflow > 0 && ` (+${data.blockOverflow} overflow)`}
         </div>
       </div>
@@ -73,11 +86,11 @@ export default function RoundStatus({ data, sharesStats, loading }: Props) {
         </div>
         <div className="stat">
           <span className="stat-label">Reward Pool</span>
-          <span className="stat-value">{formatSbtcCompact(data.miningReward)}</span>
+          <span className="stat-value">{formatSbtcCompact(data.miningReward)} <SbtcIcon /> / {formatUsdcx(usdcxMiningReward)} <UsdcxIcon /></span>
         </div>
         <div className="stat">
           <span className="stat-label">Mining Pool</span>
-          <span className="stat-value">{formatSbtcCompact(data.miningShares)}</span>
+          <span className="stat-value">{formatSbtcCompact(data.miningShares)} <SbtcIcon /> / {formatUsdcx(usdcxMiningShares)} <UsdcxIcon /></span>
         </div>
       </div>
 
@@ -87,19 +100,19 @@ export default function RoundStatus({ data, sharesStats, loading }: Props) {
           <div className="stats-grid">
             <div className="stat">
               <span className="stat-label">Total Earned</span>
-              <span className="stat-value">{formatSbtcCompact(sharesStats.totalEarned)}</span>
+              <span className="stat-value">{formatSbtcCompact(sharesStats.totalEarned)} <SbtcIcon /></span>
             </div>
             <div className="stat">
               <span className="stat-label">Total Paid</span>
-              <span className="stat-value">{formatSbtcCompact(sharesStats.totalPaid)}</span>
+              <span className="stat-value">{formatSbtcCompact(sharesStats.totalPaid)} <SbtcIcon /></span>
             </div>
             <div className="stat">
               <span className="stat-label">Paid (1h)</span>
-              <span className="stat-value">{formatSbtcCompact(sharesStats.paidLastHour)}</span>
+              <span className="stat-value">{formatSbtcCompact(sharesStats.paidLastHour)} <SbtcIcon /></span>
             </div>
             <div className="stat">
               <span className="stat-label">Paid (24h)</span>
-              <span className="stat-value">{formatSbtcCompact(sharesStats.paidLastDay)}</span>
+              <span className="stat-value">{formatSbtcCompact(sharesStats.paidLastDay)} <SbtcIcon /></span>
             </div>
           </div>
         </div>

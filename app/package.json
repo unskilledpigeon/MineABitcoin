@@ -13,6 +13,7 @@
     "@stacks/connect": "^8.2.5",
     "@stacks/network": "^7.3.1",
     "@stacks/transactions": "^7.3.1",
+    "@tanstack/react-query": "^5.90.21",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "sonner": "^2.0.7"

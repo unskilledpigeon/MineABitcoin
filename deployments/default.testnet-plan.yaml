@@ -1,45 +1,58 @@
----
 id: 0
 name: Testnet deployment
 network: testnet
-stacks-node: "https://api.testnet.hiro.so"
-bitcoin-node: "http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332"
+stacks-node: https://api.testnet.hiro.so
+bitcoin-node: http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332
 plan:
   batches:
-    - id: 0
-      transactions:
-        - requirement-publish:
-            contract-id: SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-registry
-            remap-sender: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
-            remap-principals:
-              SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
-            cost: 112090
-            path: "./.cache/requirements/SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-registry.clar"
-            clarity-version: 3
-        - requirement-publish:
-            contract-id: SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
-            remap-sender: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
-            remap-principals:
-              SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
-            cost: 47590
-            path: "./.cache/requirements/SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token.clar"
-            clarity-version: 3
-        - requirement-publish:
-            contract-id: SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-deposit
-            remap-sender: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
-            remap-principals:
-              SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
-            cost: 41510
-            path: "./.cache/requirements/SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-deposit.clar"
-            clarity-version: 3
-      epoch: "3.0"
-    - id: 1
-      transactions:
-        - contract-publish:
-            contract-name: MineABitcoinV5000
-            expected-sender: ST2PK83E969198SKZJ5GJW7V7813W5VASM7A54B7K
-            cost: 397360
-            path: contracts/MineABitcoin.clar
-            anchor-block-only: true
-            clarity-version: 3
-      epoch: "3.3"
+  - id: 0
+    transactions:
+    - transaction-type: requirement-publish
+      contract-id: SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-registry
+      remap-sender: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
+      remap-principals:
+        SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
+      cost: 112090
+      path: .cache/requirements/SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-registry.clar
+      clarity-version: 3
+    - transaction-type: requirement-publish
+      contract-id: SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+      remap-sender: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
+      remap-principals:
+        SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
+      cost: 47590
+      path: .cache/requirements/SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token.clar
+      clarity-version: 3
+    - transaction-type: requirement-publish
+      contract-id: SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-deposit
+      remap-sender: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
+      remap-principals:
+        SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
+      cost: 41510
+      path: .cache/requirements/SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-deposit.clar
+      clarity-version: 3
+    epoch: '3.0'
+  - id: 1
+    transactions:
+    - transaction-type: contract-publish
+      contract-name: mock-pyth-oracle
+      expected-sender: ST1NCN5GS9GGYX619EC61DRQESDQTFX4ZNAVZ1PCY
+      cost: 18530
+      path: contracts/mock-pyth-oracle.clar
+      anchor-block-only: true
+      clarity-version: 3
+    - transaction-type: contract-publish
+      contract-name: MineABitcoin50000
+      expected-sender: ST1NCN5GS9GGYX619EC61DRQESDQTFX4ZNAVZ1PCY
+      cost: 707290
+      path: contracts/MineABitcoin.clar
+      anchor-block-only: true
+      clarity-version: 3
+    - transaction-type: contract-publish
+      contract-name: mock-usdcx-token
+      expected-sender: ST1NCN5GS9GGYX619EC61DRQESDQTFX4ZNAVZ1PCY
+      cost: 13850
+      path: contracts/mock-usdcx-token.clar
+      anchor-block-only: true
+      clarity-version: 3
+    epoch: '3.3'
