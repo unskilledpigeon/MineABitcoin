@@ -1,10 +1,9 @@
-import { formatSbtcCompact, formatUsdcx, roundEra } from "../lib/constants";
-import { SbtcIcon, UsdcxIcon } from "./TokenIcons";
+import { formatSbtcCompact, roundEra } from "../lib/constants";
+import { SbtcIcon } from "./TokenIcons";
 
 interface Props {
   winner: string | null;
   jackpot: number;
-  jackpotUsdcx: number;
   round: number;
   address: string | null;
   cooldownBlocksRemaining: number;
@@ -14,7 +13,6 @@ interface Props {
 export default function CooldownOverlay({
   winner,
   jackpot,
-  jackpotUsdcx,
   round,
   address,
   cooldownBlocksRemaining,
@@ -40,7 +38,7 @@ export default function CooldownOverlay({
 
         <div className="cooldown-jackpot">
           <span className="cooldown-jackpot-label">Jackpot</span>
-          <span className="cooldown-jackpot-value">{formatSbtcCompact(jackpot)} <SbtcIcon size={24} /> / {formatUsdcx(jackpotUsdcx)} <UsdcxIcon size={24} /></span>
+          <span className="cooldown-jackpot-value">{formatSbtcCompact(jackpot)} <SbtcIcon size={24} /></span>
         </div>
 
         <div className="cooldown-winner-section">
@@ -51,7 +49,7 @@ export default function CooldownOverlay({
                 You were the <strong>last miner standing</strong>. Claim your reward now.
               </p>
               <button className="btn btn-claim-jackpot" onClick={onClaimReward}>
-                Claim {formatSbtcCompact(jackpot)} <SbtcIcon /> / {formatUsdcx(jackpotUsdcx)} <UsdcxIcon /> Jackpot
+                Claim {formatSbtcCompact(jackpot)} <SbtcIcon size={18} /> Jackpot
               </button>
             </>
           ) : (

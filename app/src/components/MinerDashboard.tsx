@@ -1,6 +1,6 @@
-import { formatSbtcCompact, formatUsdcx, rigName } from "../lib/constants";
-import { SbtcIcon, UsdcxIcon } from "./TokenIcons";
-import { claimMiningShares, claimMiningSharesDual, claimMiningReward, claimMiningRewardDual, claimUnclaimedSbtc, claimUnclaimedUsdcx } from "../lib/stacks";
+import { formatSbtcCompact, rigName } from "../lib/constants";
+import { SbtcIcon } from "./TokenIcons";
+import { claimMiningShares, claimMiningReward, claimUnclaimedSbtc } from "../lib/stacks";
 
 interface MinerData {
   hashes: number;
@@ -12,12 +12,9 @@ interface Props {
   minerData: MinerData | null;
   pendingReward: number;
   referralEarnings: number;
-  referralEarningsUsdcx: number;
   totalWithdrawn: number;
   unclaimedSbtc: number;
-  unclaimedUsdcx: number;
   isCooldown: boolean;
-  hasUsdcxInPools: boolean;
   onTx: (txId: string) => void;
 }
 
@@ -33,31 +30,12 @@ export default function MinerDashboard({
   minerData,
   pendingReward,
   referralEarnings,
-  referralEarningsUsdcx,
   totalWithdrawn,
   unclaimedSbtc,
-  unclaimedUsdcx,
   isCooldown,
-  hasUsdcxInPools,
   onTx,
 }: Props) {
   const connected = !!address;
-
-  function handleClaimShares() {
-    if (hasUsdcxInPools) {
-      claimMiningSharesDual(onTx);
-    } else {
-      claimMiningShares(onTx);
-    }
-  }
-
-  function handleClaimReward() {
-    if (hasUsdcxInPools) {
-      claimMiningRewardDual(onTx);
-    } else {
-      claimMiningReward(onTx);
-    }
-  }
 
   return (
     <div className="card miner-dashboard">
@@ -82,7 +60,7 @@ export default function MinerDashboard({
             </tr>
             <tr>
               <td className="earnings-label">Referral Earnings</td>
-              <td className="earnings-value">{formatSbtcCompact(referralEarnings)} <SbtcIcon /> / {formatUsdcx(referralEarningsUsdcx)} <UsdcxIcon /></td>
+              <td className="earnings-value">{formatSbtcCompact(referralEarnings)} <SbtcIcon /></td>
             </tr>
             <tr>
               <td className="earnings-label">Total Withdrawn</td>
@@ -94,20 +72,14 @@ export default function MinerDashboard({
                 <td className="earnings-value">{formatSbtcCompact(unclaimedSbtc)} <SbtcIcon /></td>
               </tr>
             )}
-            {unclaimedUsdcx > 0 && (
-              <tr>
-                <td className="earnings-label">Unclaimed USDCx</td>
-                <td className="earnings-value">{formatUsdcx(unclaimedUsdcx)} <UsdcxIcon /></td>
-              </tr>
-            )}
           </tbody>
         </table>
 
         {connected && (
           <div className="actions">
             {pendingReward > 0 && (
-              <button className="btn btn-action" onClick={handleClaimShares}>
-                Claim {formatSbtcCompact(pendingReward)} <SbtcIcon />{hasUsdcxInPools && <> + <UsdcxIcon /></>}
+              <button className="btn btn-action" onClick={() => claimMiningShares(onTx)}>
+                Claim {formatSbtcCompact(pendingReward)} <SbtcIcon />
               </button>
             )}
             {unclaimedSbtc > 0 && (
@@ -115,13 +87,8 @@ export default function MinerDashboard({
                 Claim {formatSbtcCompact(unclaimedSbtc)} <SbtcIcon />
               </button>
             )}
-            {unclaimedUsdcx > 0 && (
-              <button className="btn btn-action" onClick={() => claimUnclaimedUsdcx(onTx)}>
-                Claim {formatUsdcx(unclaimedUsdcx)} <UsdcxIcon />
-              </button>
-            )}
             {isCooldown && (
-              <button className="btn btn-winner" onClick={handleClaimReward}>
+              <button className="btn btn-winner" onClick={() => claimMiningReward(onTx)}>
                 Claim Mining Reward
               </button>
             )}

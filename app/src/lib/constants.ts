@@ -2,9 +2,6 @@
 export const CONTRACT_ADDRESS = "ST1NCN5GS9GGYX619EC61DRQESDQTFX4ZNAVZ1PCY";
 export const CONTRACT_NAME = "MineABitcoin50000";
 export const SBTC_CONTRACT = "ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-token";
-export const USDCX_CONTRACT = "ST2PK83E969198SKZJ5GJW7V7813W5VASM7A54B7K.mock-usdcx-token";
-export const USDCX_DECIMALS = 6;
-
 // Game states
 export const STATE_ONGOING = 1;
 export const STATE_COOLDOWN = 2;
@@ -50,18 +47,6 @@ export function formatSbtcCompact(sats: number): string {
 
 /** @deprecated Use formatSbtc or formatSbtcCompact instead */
 export const formatSats = formatSbtcCompact;
-
-/**
- * Format a USDCx micro-unit value (6 decimals).
- * Returns just the number — pair with the USDCx icon.
- */
-export function formatUsdcx(microUnits: number): string {
-  if (microUnits === 0) return "0";
-  const usd = microUnits / 1e6;
-  if (usd >= 1) return usd.toFixed(2);
-  if (usd >= 0.01) return usd.toFixed(4);
-  return usd.toFixed(6);
-}
 
 export function rigName(id: number): string {
   return Object.values(RIGS).find((r) => r.id === id)?.label ?? "Unknown";

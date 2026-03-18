@@ -7,13 +7,12 @@ import BuyHashes from "./components/BuyHashes";
 import RegisterTag from "./components/RegisterTag";
 import MinerDashboard from "./components/MinerDashboard";
 import CooldownOverlay from "./components/CooldownOverlay";
-import { SbtcIcon, UsdcxIcon } from "./components/TokenIcons";
-import { formatSbtcCompact, formatUsdcx, heroTagline } from "./lib/constants";
-import { claimMiningReward, claimMiningRewardDual } from "./lib/stacks";
+import { SbtcIcon } from "./components/TokenIcons";
+import { formatSbtcCompact, heroTagline } from "./lib/constants";
+import { claimMiningReward } from "./lib/stacks";
 import {
   useRoundInfo,
   useSharesStats,
-  useUsdcxPools,
   useLastMiner,
   useMinerTag,
   useMinerData,
@@ -80,8 +79,6 @@ function App() {
   // TanStack Query hooks — auto-poll every 30s
   const { data: roundData, isLoading: roundLoading } = useRoundInfo();
   const { data: sharesStats } = useSharesStats();
-  const { data: usdcxPools } = useUsdcxPools();
-  const hasUsdcxInPools = usdcxPools?.hasAny ?? false;
   const { data: lastMiner } = useLastMiner();
   const { data: minerTag } = useMinerTag(address);
   const { data: minerResult } = useMinerData(address, roundData?.round);
@@ -90,10 +87,8 @@ function App() {
   const minerData = minerResult?.minerData ?? null;
   const pendingReward = minerResult?.pendingReward ?? 0;
   const referralEarnings = minerResult?.referralEarnings ?? 0;
-  const referralEarningsUsdcx = minerResult?.referralEarningsUsdcx ?? 0;
   const totalWithdrawn = minerResult?.totalWithdrawn ?? 0;
   const unclaimedSbtc = minerResult?.unclaimedSbtc ?? 0;
-  const unclaimedUsdcx = minerResult?.unclaimedUsdcx ?? 0;
 
   function handleConnect(addr: string) {
     setAddress(addr);
@@ -116,14 +111,6 @@ function App() {
     roundData?.state === STATE_ONGOING && roundData?.blocksRemaining === 0
   );
   const cooldownExpired = roundData?.state === STATE_COOLDOWN && (roundData?.cooldownBlocksRemaining ?? 0) === 0;
-
-  function handleClaimJackpot() {
-    if (hasUsdcxInPools) {
-      claimMiningRewardDual(handleTx);
-    } else {
-      claimMiningReward(handleTx);
-    }
-  }
 
   return (
     <div className={`app${isCooldown ? " app-cooldown" : ""}`}>
@@ -155,11 +142,10 @@ function App() {
         <CooldownOverlay
           winner={lastMiner ?? null}
           jackpot={roundData.miningReward}
-          jackpotUsdcx={usdcxPools?.miningReward ?? 0}
           round={roundData.round}
           address={address}
           cooldownBlocksRemaining={roundData.cooldownBlocksRemaining}
-          onClaimReward={handleClaimJackpot}
+          onClaimReward={() => claimMiningReward(handleTx)}
         />
       )}
 
@@ -175,7 +161,7 @@ function App() {
           <div className="hero-stats">
             <div className="hero-stat">
               <div className="hero-stat-value">
-                {formatSbtcCompact(roundData.miningReward)} <SbtcIcon size={18} /> / {formatUsdcx(usdcxPools?.miningReward ?? 0)} <UsdcxIcon size={18} />
+                {formatSbtcCompact(roundData.miningReward)} <SbtcIcon size={18} />
               </div>
               <div className="hero-stat-label">Reward Pool</div>
             </div>
@@ -201,18 +187,15 @@ function App() {
 
       <main className="app-main">
         <div className="left-col">
-          <RoundStatus data={roundData ?? null} sharesStats={sharesStats ?? null} loading={roundLoading} usdcxMiningReward={usdcxPools?.miningReward ?? 0} usdcxMiningShares={usdcxPools?.miningShares ?? 0} />
+          <RoundStatus data={roundData ?? null} sharesStats={sharesStats ?? null} loading={roundLoading} />
           <MinerDashboard
             address={address}
             minerData={minerData}
             pendingReward={pendingReward}
             referralEarnings={referralEarnings}
-            referralEarningsUsdcx={referralEarningsUsdcx}
             totalWithdrawn={totalWithdrawn}
             unclaimedSbtc={unclaimedSbtc}
-            unclaimedUsdcx={unclaimedUsdcx}
             isCooldown={isCooldown ?? false}
-            hasUsdcxInPools={hasUsdcxInPools}
             onTx={handleTx}
           />
         </div>

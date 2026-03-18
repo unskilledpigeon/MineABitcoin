@@ -44,7 +44,8 @@
 (define-constant ERR-INVALID-TOKEN (err u1016))
 (define-constant ERR-ROUND-ENDED (err u1017))
 (define-constant ERR-INVALID-VALUE (err u1018))
-(define-constant ERR-PRICE-NEGATIVE (err u1019))
+(define-constant ERR-RIG-LOCKED (err u1019))
+
 
 ;; Game states
 (define-constant STATE-ONGOING u1)
@@ -72,13 +73,6 @@
 ;; Percentage basis (10000 = 100%)
 (define-constant BASIS u10000)
 
-;; Pyth BTC/USD price feed ID
-(define-constant BTC-USD-FEED-ID 0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43)
-
-;; Token decimal constants
-(define-constant USDCX-DECIMALS u1000000)     ;; 1e6
-(define-constant SBTC-DECIMALS u100000000)    ;; 1e8
-
 ;; Hashes required per block to prevent countdown
 (define-constant HASHES-PER-BLOCK u20)
 
@@ -91,9 +85,6 @@
 
 ;; sBTC token contract principal (configurable for testnet/mainnet)
 (define-data-var sbtc principal 'ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-token)
-
-;; USDCx token contract principal (configurable for testnet/mainnet)
-(define-data-var usdcx principal 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.mock-usdcx-token)
 
 ;; Referral code registration fee (in sats)
 (define-data-var referral-fee uint u10000)
@@ -132,15 +123,6 @@
 (define-data-var next-round-pool uint u0)
 (define-data-var airdrop-pool uint u0)
 (define-data-var dev-pool uint u0)
-
-;; USDCx pools (mirror sBTC pools, tracked in USDCx micro-units)
-(define-data-var mining-reward-pool-usdcx uint u0)
-(define-data-var mining-shares-pool-usdcx uint u0)
-(define-data-var token-holders-pool-usdcx uint u0)
-(define-data-var free-hunt-pool-usdcx uint u0)
-(define-data-var next-round-pool-usdcx uint u0)
-(define-data-var airdrop-pool-usdcx uint u0)
-(define-data-var dev-pool-usdcx uint u0)
 
 ;; Reward mask (global accumulator for mining shares)
 (define-data-var global-mask uint u0)
@@ -204,9 +186,6 @@
 
 ;; Referral earnings (cumulative tracking - paid directly on each buy)
 (define-map referral-earnings principal uint)
-;; Referral earnings in USDCx (actual micro-units, not sat-equivalent)
-(define-map referral-earnings-usdcx principal uint)
-
 ;; Total withdrawn by each miner (cumulative across all claims)
 (define-map total-withdrawn principal uint)
 
@@ -221,7 +200,6 @@
 
 ;; Unclaimed mining reward snapshots per round (set on round reset)
 (define-map round-unclaimed-reward uint uint)
-(define-map round-unclaimed-reward-usdcx uint uint)
 (define-map round-total-hashes uint uint)
 
 ;; Last active round per miner (for lazy unclaimed reward settlement)
@@ -229,7 +207,12 @@
 
 ;; Accumulated unclaimed reward balances per miner (claimable separately)
 (define-map miner-unclaimed-sbtc principal uint)
-(define-map miner-unclaimed-usdcx principal uint)
+
+;; Round winner snapshot (for fair unclaimed reward distribution)
+(define-map round-winner uint { winner: principal, rig: uint })
+
+;; Shares pool snapshot per round (for past-round claim accounting)
+(define-map round-shares-pool uint uint)
 
 ;; ---------------------------------------------------------
 ;; Private: sBTC Vault (as-contract pattern)
@@ -238,86 +221,6 @@
 ;; Validate that the provided token matches the stored sBTC principal
 (define-private (check-token (token principal))
   (is-eq token (var-get sbtc))
-)
-
-;; Validate that the provided token is USDCx
-(define-private (check-token-usdcx (token principal))
-  (is-eq token (var-get usdcx))
-)
-
-;; ---------------------------------------------------------
-;; Private: Pyth Oracle Price Helpers
-;; ---------------------------------------------------------
-
-;; Power of 10 helper (Clarity lacks pow). Supports exponents 0-10.
-(define-private (pow10 (n uint))
-  (if (is-eq n u0) u1
-    (if (is-eq n u1) u10
-      (if (is-eq n u2) u100
-        (if (is-eq n u3) u1000
-          (if (is-eq n u4) u10000
-            (if (is-eq n u5) u100000
-              (if (is-eq n u6) u1000000
-                (if (is-eq n u7) u10000000
-                  (if (is-eq n u8) u100000000
-                    (if (is-eq n u9) u1000000000
-                      u10000000000
-                    ))))))))))
-)
-
-;; Update Pyth oracle with fresh VAA and read BTC/USD price.
-;; Returns { price: uint, expo: uint } where expo is the absolute exponent.
-;; For simnet: calls mock-pyth-oracle. For testnet/mainnet: swap to real Pyth addresses.
-(define-private (update-and-get-btc-price (price-feed-bytes (buff 8192)))
-  (begin
-    ;; Verify and update the price feed with the provided VAA
-    (try! (contract-call? .mock-pyth-oracle verify-and-update-price-feeds price-feed-bytes))
-    ;; Read the updated price
-    (let
-      (
-        (price-data (try! (contract-call? .mock-pyth-oracle read-price-feed BTC-USD-FEED-ID)))
-        (raw-price (get price price-data))
-        (raw-expo (get expo price-data))
-      )
-      ;; Price must be positive
-      (asserts! (> raw-price 0) ERR-PRICE-NEGATIVE)
-      ;; Convert negative exponent to absolute value (Pyth exponents are negative for USD prices)
-      (let
-        (
-          (abs-expo (if (< raw-expo 0) (to-uint (- 0 raw-expo)) u0))
-        )
-        (ok { price: (to-uint raw-price), expo: abs-expo })
-      )
-    )
-  )
-)
-
-;; Convert a sat amount to USDCx micro-units using BTC/USD price.
-;; Formula: usdcx = sats * price * USDCX_DECIMALS / (pow10(expo) * SBTC_DECIMALS)
-;; Example: 10000 sats, price=8350000, expo=2 = $83,500
-;;   = 10000 * 8350000 * 1e6 / (100 * 1e8) = 835000 USDCx (~$0.835)
-(define-private (sats-to-usdcx (sats uint) (btc-price uint) (abs-expo uint))
-  (let
-    (
-      (scale (pow10 abs-expo))
-      (numerator (* sats (* btc-price USDCX-DECIMALS)))
-      (denominator (* scale SBTC-DECIMALS))
-    )
-    (/ numerator denominator)
-  )
-)
-
-;; Convert USDCx micro-units to sat-equivalent using BTC/USD price.
-;; Formula: sats = usdcx * pow10(expo) * SBTC_DECIMALS / (price * USDCX_DECIMALS)
-(define-private (usdcx-to-sats (usdcx-amount uint) (btc-price uint) (abs-expo uint))
-  (let
-    (
-      (scale (pow10 abs-expo))
-      (numerator (* usdcx-amount (* scale SBTC-DECIMALS)))
-      (denominator (* btc-price USDCX-DECIMALS))
-    )
-    (/ numerator denominator)
-  )
 )
 
 ;; Transfer sBTC from caller into the contract vault
@@ -357,10 +260,19 @@
     )
     ;; Snapshot unclaimed mining reward and total hashes for the ending round
     (map-set round-unclaimed-reward ending-round (var-get mining-reward-pool))
-    (map-set round-unclaimed-reward-usdcx ending-round (var-get mining-reward-pool-usdcx))
     (map-set round-total-hashes ending-round (var-get total-hashes))
     ;; Snapshot the final global mask for the ending round (enables cross-round claims)
     (map-set round-final-mask ending-round (var-get global-mask))
+    ;; Snapshot shares pool for past-round claim accounting
+    (map-set round-shares-pool ending-round (var-get mining-shares-pool))
+    ;; Snapshot round winner for fair unclaimed reward distribution
+    (match (var-get last-miner) winner
+      (match (map-get? miner-state { miner: winner, round: ending-round }) state
+        (map-set round-winner ending-round { winner: winner, rig: (get rig state) })
+        false
+      )
+      false
+    )
     ;; Reset for new round
     (var-set current-round (+ ending-round u1))
     (var-set game-state STATE-ONGOING)
@@ -375,11 +287,6 @@
     (var-set next-round-pool u0)
     (var-set mining-shares-pool u0)
     (var-set airdrop-pool u0)
-    ;; Carry over USDCx next-round pool only
-    (var-set mining-reward-pool-usdcx (var-get next-round-pool-usdcx))
-    (var-set next-round-pool-usdcx u0)
-    (var-set mining-shares-pool-usdcx u0)
-    (var-set airdrop-pool-usdcx u0)
     (var-set global-mask u0)
     (var-set unique-miners u0)
     (var-set last-miner none)
@@ -701,46 +608,6 @@
   )
 )
 
-;; Distribute USDCx payment across USDCx pools (mirrors distribute-payment)
-;; amount-usdcx: actual USDCx micro-units to track in pools
-;; amount-sats: sat-equivalent for mask accounting (computed via oracle)
-(define-private (distribute-payment-usdcx (amount-usdcx uint) (amount-sats uint) (rig uint) (has-referrer bool))
-  (let
-    (
-      (allocs (get-rig-allocations rig))
-      ;; USDCx pool splits (proportional to the actual USDCx amount)
-      (to-reward-usdcx (/ (* amount-usdcx (get reward allocs)) BASIS))
-      (to-shares-usdcx (/ (* amount-usdcx (get shares allocs)) BASIS))
-      (to-token-holders-usdcx (/ (* amount-usdcx (get token-holders allocs)) BASIS))
-      (to-free-hunt-usdcx (/ (* amount-usdcx u80) BASIS))
-      (to-next-round-usdcx (/ (* amount-usdcx u20) BASIS))
-      (to-airdrop-usdcx (/ (* amount-usdcx u100) BASIS))
-      (to-referrer-usdcx (/ (* amount-usdcx u700) BASIS))
-      (allocated-usdcx (+ to-reward-usdcx (+ to-shares-usdcx (+ to-token-holders-usdcx (+ to-free-hunt-usdcx (+ to-next-round-usdcx (+ to-airdrop-usdcx to-referrer-usdcx)))))))
-      (to-dev-usdcx (- amount-usdcx allocated-usdcx))
-      ;; Sat-equivalent for mask accounting
-      (to-shares-sats (/ (* amount-sats (get shares allocs)) BASIS))
-    )
-    (begin
-      (var-set mining-reward-pool-usdcx (+ (var-get mining-reward-pool-usdcx) to-reward-usdcx))
-      (var-set mining-shares-pool-usdcx (+ (var-get mining-shares-pool-usdcx) to-shares-usdcx))
-      (record-shares-earned to-shares-sats)
-      (var-set token-holders-pool-usdcx (+ (var-get token-holders-pool-usdcx) to-token-holders-usdcx))
-      (var-set free-hunt-pool-usdcx (+ (var-get free-hunt-pool-usdcx) to-free-hunt-usdcx))
-      (var-set next-round-pool-usdcx (+ (var-get next-round-pool-usdcx) to-next-round-usdcx))
-      (var-set airdrop-pool-usdcx (+ (var-get airdrop-pool-usdcx) to-airdrop-usdcx))
-      (if has-referrer
-        (var-set dev-pool-usdcx (+ (var-get dev-pool-usdcx) to-dev-usdcx))
-        (var-set dev-pool-usdcx (+ (var-get dev-pool-usdcx) (+ to-dev-usdcx to-referrer-usdcx)))
-      )
-      {
-        to-referrer-usdcx: (if has-referrer to-referrer-usdcx u0),
-        to-shares-sats: to-shares-sats
-      }
-    )
-  )
-)
-
 ;; ---------------------------------------------------------
 ;; Private: Rig counter helpers
 ;; ---------------------------------------------------------
@@ -835,59 +702,11 @@
 )
 
 ;; ---------------------------------------------------------
-;; Public: Register Miner Tag with USDCx
-;; ---------------------------------------------------------
-
-(define-public (register-miner-tag-usdcx
-    (tag (string-ascii 24))
-    (token <sip-010-trait>)
-    (price-feed-bytes (buff 8192))
-  )
-  (let
-    (
-      (caller tx-sender)
-      (tag-len (len tag))
-      (fee-sats (var-get referral-fee))
-    )
-    ;; Update round status
-    (check-and-update-round-status)
-    ;; Validate token is USDCx
-    (asserts! (check-token-usdcx (contract-of token)) ERR-INVALID-TOKEN)
-    ;; Validate tag
-    (asserts! (>= tag-len u3) ERR-MINER-TAG-TOO-SHORT)
-    (asserts! (<= tag-len u24) ERR-MINER-TAG-TOO-LONG)
-    (asserts! (is-none (map-get? principal-to-tag caller)) ERR-ALREADY-REGISTERED)
-    (asserts! (is-none (map-get? tag-to-principal tag)) ERR-MINER-TAG-TAKEN)
-    (asserts! (not (is-reserved-tag tag)) ERR-RESERVED-TAG)
-
-    ;; Get BTC/USD price from oracle
-    (let
-      (
-        (price-info (try! (update-and-get-btc-price price-feed-bytes)))
-        (btc-price (get price price-info))
-        (abs-expo (get expo price-info))
-        ;; Convert fee from sats to USDCx
-        (fee-usdcx (sats-to-usdcx fee-sats btc-price abs-expo))
-      )
-      ;; Pay registration fee in USDCx
-      (try! (vault-deposit token caller fee-usdcx))
-      (var-set dev-pool-usdcx (+ (var-get dev-pool-usdcx) fee-usdcx))
-
-      ;; Set bidirectional maps
-      (map-set tag-to-principal tag caller)
-      (map-set principal-to-tag caller tag)
-
-      (ok tag)
-    )
-  )
-)
-
-;; ---------------------------------------------------------
 ;; Private: Settle unclaimed mining reward from previous round
 ;; ---------------------------------------------------------
 ;; When a miner interacts in a new round, check if they participated in
 ;; a previous round where the mining reward went unclaimed. If so,
-;; credit their proportional share to miner-unclaimed-sbtc/usdcx maps.
+;; credit their proportional share to miner-unclaimed-sbtc map.
 
 (define-private (settle-previous-round (caller principal) (cur-round uint))
   (let
@@ -899,19 +718,25 @@
         (
           (prev-state (map-get? miner-state { miner: caller, round: last-round }))
           (unclaimed-sbtc (default-to u0 (map-get? round-unclaimed-reward last-round)))
-          (unclaimed-usdcx-val (default-to u0 (map-get? round-unclaimed-reward-usdcx last-round)))
           (prev-total (default-to u0 (map-get? round-total-hashes last-round)))
         )
         (match prev-state state
           (let
             (
               (user-hashes (get hashes state))
-              (share-sbtc (if (and (> unclaimed-sbtc u0) (> prev-total u0))
-                (/ (* unclaimed-sbtc user-hashes) prev-total)
+              ;; Check if caller was the winner of the previous round
+              (winner-info (map-get? round-winner last-round))
+              (is-winner (match winner-info info (is-eq caller (get winner info)) false))
+              ;; Winner gets 48% exclusive share; remaining 52% distributed proportionally
+              (winner-exclusive (/ (* unclaimed-sbtc u4800) BASIS))
+              (proportional-pool (- unclaimed-sbtc winner-exclusive))
+              (proportional-share (if (and (> proportional-pool u0) (> prev-total u0))
+                (/ (* proportional-pool user-hashes) prev-total)
                 u0))
-              (share-usdcx (if (and (> unclaimed-usdcx-val u0) (> prev-total u0))
-                (/ (* unclaimed-usdcx-val user-hashes) prev-total)
-                u0))
+              ;; Winner gets exclusive + proportional; others get only proportional
+              (share-sbtc (if is-winner
+                (+ winner-exclusive proportional-share)
+                proportional-share))
             )
             ;; Log settlement
             (print {
@@ -920,20 +745,13 @@
               from-round: last-round,
               to-round: cur-round,
               sbtc-share: share-sbtc,
-              usdcx-share: share-usdcx,
-              round-unclaimed-sbtc: unclaimed-sbtc,
-              round-unclaimed-usdcx: unclaimed-usdcx-val
+              is-winner: is-winner,
+              round-unclaimed-sbtc: unclaimed-sbtc
             })
             ;; Credit unclaimed sBTC balance
             (if (> share-sbtc u0)
               (map-set miner-unclaimed-sbtc caller
                 (+ (default-to u0 (map-get? miner-unclaimed-sbtc caller)) share-sbtc))
-              false
-            )
-            ;; Credit unclaimed USDCx balance
-            (if (> share-usdcx u0)
-              (map-set miner-unclaimed-usdcx caller
-                (+ (default-to u0 (map-get? miner-unclaimed-usdcx caller)) share-usdcx))
               false
             )
             ;; Update last round
@@ -974,23 +792,26 @@
         (supply (var-get total-hashes))
         (cost (get-cost-for-hashes supply hash-amount))
         (existing (map-get? miner-state { miner: caller, round: round }))
-        ;; Set referrer on first buy if provided and not already set
-        (referrer-set (if (is-none (map-get? miner-referrer caller))
-          (match referrer-tag ref-tag
-            (match (map-get? tag-to-principal ref-tag) referrer-principal
-              (if (not (is-eq referrer-principal caller))
-                (map-insert miner-referrer caller referrer-principal)
-                false
-              )
+        (has-referrer-already (is-some (map-get? miner-referrer caller)))
+      )
+      ;; Set referrer on first buy if provided and not already set
+      (if (and (not has-referrer-already) (is-some referrer-tag))
+        (match referrer-tag ref-tag
+          (match (map-get? tag-to-principal ref-tag) referrer-principal
+            (if (not (is-eq referrer-principal caller))
+              (map-insert miner-referrer caller referrer-principal)
               false
             )
             false
           )
           false
-        ))
-        (has-referrer (is-some (map-get? miner-referrer caller)))
-        (blocks-left (compute-blocks-remaining))
+        )
+        false
       )
+      (let
+        (
+          (has-referrer (or has-referrer-already (is-some (map-get? miner-referrer caller))))
+        )
       ;; Settle unclaimed mining reward from previous rounds
       (settle-previous-round caller round)
       ;; Validate token
@@ -998,9 +819,11 @@
       ;; Must be ONGOING (after auto-check)
       (asserts! (is-eq (var-get game-state) STATE-ONGOING) ERR-GAME-NOT-ONGOING)
       ;; Must have blocks remaining in this round
-      (asserts! (> blocks-left u0) ERR-ROUND-ENDED)
+      (asserts! (> (compute-blocks-remaining) u0) ERR-ROUND-ENDED)
       (asserts! (> hash-amount u0) ERR-ZERO-HASHES)
       (asserts! (or (is-eq rig RIG-CPU) (or (is-eq rig RIG-GPU) (or (is-eq rig RIG-FPGA) (is-eq rig RIG-ASIC)))) ERR-INVALID-RIG)
+      ;; Rig type locked per miner per round - cannot switch after first buy
+      (asserts! (match existing state (is-eq rig (get rig state)) true) ERR-RIG-LOCKED)
       ;; Slippage protection
       (asserts! (<= cost max-sbtc) ERR-INSUFFICIENT-PAYMENT)
 
@@ -1084,151 +907,8 @@
         ;; Update last miner (winner candidate)
         (var-set last-miner (some caller))
 
-        (ok { cost: cost, hashes: hash-amount, new-supply: new-total, block-height: burn-block-height, blocks-remaining: blocks-left })
+        (ok { cost: cost, hashes: hash-amount, new-supply: new-total, block-height: burn-block-height, blocks-remaining: (compute-blocks-remaining) })
       )
-    )
-  )
-)
-
-;; ---------------------------------------------------------
-;; Public: Buy Hashes with USDCx (oracle-priced)
-;; ---------------------------------------------------------
-
-(define-public (buy-hashes-usdcx
-    (hash-amount uint)
-    (rig uint)
-    (max-usdcx uint)
-    (referrer-tag (optional (string-ascii 24)))
-    (token <sip-010-trait>)
-    (price-feed-bytes (buff 8192))
-  )
-  (let
-    (
-      (caller tx-sender)
-    )
-    ;; Update round status
-    (check-and-update-round-status)
-
-    (let
-      (
-        (round (var-get current-round))
-        (supply (var-get total-hashes))
-        (cost-sats (get-cost-for-hashes supply hash-amount))
-        ;; Get BTC/USD price from oracle
-        (price-info (try! (update-and-get-btc-price price-feed-bytes)))
-        (btc-price (get price price-info))
-        (abs-expo (get expo price-info))
-        ;; Convert cost from sats to USDCx
-        (cost-usdcx (sats-to-usdcx cost-sats btc-price abs-expo))
-        (existing (map-get? miner-state { miner: caller, round: round }))
-        ;; Set referrer on first buy if provided and not already set
-        (referrer-set (if (is-none (map-get? miner-referrer caller))
-          (match referrer-tag ref-tag
-            (match (map-get? tag-to-principal ref-tag) referrer-principal
-              (if (not (is-eq referrer-principal caller))
-                (map-insert miner-referrer caller referrer-principal)
-                false
-              )
-              false
-            )
-            false
-          )
-          false
-        ))
-        (has-referrer (is-some (map-get? miner-referrer caller)))
-        (blocks-left (compute-blocks-remaining))
-      )
-      ;; Settle unclaimed mining reward from previous rounds
-      (settle-previous-round caller round)
-      ;; Validate token is USDCx
-      (asserts! (check-token-usdcx (contract-of token)) ERR-INVALID-TOKEN)
-      ;; Must be ONGOING
-      (asserts! (is-eq (var-get game-state) STATE-ONGOING) ERR-GAME-NOT-ONGOING)
-      (asserts! (> blocks-left u0) ERR-ROUND-ENDED)
-      (asserts! (> hash-amount u0) ERR-ZERO-HASHES)
-      (asserts! (or (is-eq rig RIG-CPU) (or (is-eq rig RIG-GPU) (or (is-eq rig RIG-FPGA) (is-eq rig RIG-ASIC)))) ERR-INVALID-RIG)
-      ;; Slippage protection (in USDCx)
-      (asserts! (<= cost-usdcx max-usdcx) ERR-INSUFFICIENT-PAYMENT)
-
-      ;; Transfer USDCx into contract vault
-      (try! (vault-deposit token caller cost-usdcx))
-
-      ;; Update total hashes (before mask calc)
-      (var-set total-hashes (+ supply hash-amount))
-
-      ;; Track hashes purchased at this block height
-      (track-block-hashes round hash-amount)
-
-      ;; Process hash carry
-      (process-hash-carry hash-amount)
-
-      ;; Distribute payment across USDCx pools (mask accounting uses sat-equivalent)
-      (let
-        (
-          (dist (distribute-payment-usdcx cost-usdcx cost-sats rig has-referrer))
-          (to-shares-sats (get to-shares-sats dist))
-          (to-referrer-usdcx (get to-referrer-usdcx dist))
-          (new-total (var-get total-hashes))
-          ;; Mask delta uses sat-equivalent shares
-          (mask-delta (if (> new-total u0) (/ (* to-shares-sats PRECISION) new-total) u0))
-          (new-global-mask (+ (var-get global-mask) mask-delta))
-          (is-new (is-none existing))
-          (prev-hashes (match existing state (get hashes state) u0))
-          (prev-mask (match existing state (get mask state) u0))
-          (prev-pending (match existing state (get pending state) u0))
-          (settled-pending (if is-new
-            u0
-            (+ prev-pending
-              (if (> new-global-mask prev-mask)
-                (/ (* prev-hashes (- new-global-mask prev-mask)) PRECISION)
-                u0
-              )
-            )
-          ))
-        )
-
-        ;; Update global mask
-        (var-set global-mask new-global-mask)
-
-        ;; Update rig counter
-        (increment-rig-counter rig hash-amount)
-
-        ;; Send referrer earnings in USDCx
-        (if (and has-referrer (> to-referrer-usdcx u0))
-          (match (map-get? miner-referrer caller) referrer
-            (begin
-              (try! (vault-withdraw token referrer to-referrer-usdcx))
-              (map-set referral-earnings-usdcx referrer
-                (+ (default-to u0 (map-get? referral-earnings-usdcx referrer))
-                   to-referrer-usdcx)
-              )
-              true
-            )
-            false
-          )
-          false
-        )
-
-        ;; Update miner state (all in sat-equivalent)
-        (map-set miner-state { miner: caller, round: round }
-          {
-            hashes: (+ prev-hashes hash-amount),
-            rig: rig,
-            mask: new-global-mask,
-            pending: settled-pending
-          }
-        )
-
-        ;; Increment unique miners if new
-        (if is-new
-          (var-set unique-miners (+ (var-get unique-miners) u1))
-          false
-        )
-
-        ;; Update last miner (winner candidate)
-        (var-set last-miner (some caller))
-
-        (ok { cost-usdcx: cost-usdcx, cost-sats: cost-sats, hashes: hash-amount, new-supply: new-total, block-height: burn-block-height, blocks-remaining: blocks-left })
       )
     )
   )
@@ -1277,11 +957,12 @@
           ))
           (reward (+ settled mask-reward))
           (is-current (is-eq round cur-round))
-          ;; Only cap against pool balance for current round; past rounds withdraw directly
-          (pool-balance (var-get mining-shares-pool))
-          (actual-payout (if is-current
-            (if (> reward pool-balance) pool-balance reward)
-            reward))
+          ;; Cap against pool balance: current-round uses live pool, past rounds use snapshot
+          (pool-balance (if is-current
+            (var-get mining-shares-pool)
+            (default-to u0 (map-get? round-shares-pool round))
+          ))
+          (actual-payout (if (> reward pool-balance) pool-balance reward))
           (remaining (if is-current (- reward actual-payout) u0))
         )
         (asserts! (> reward u0) ERR-NO-REWARD)
@@ -1289,10 +970,10 @@
 
         ;; Pay from vault
         (try! (vault-withdraw token caller actual-payout))
-        ;; Only deduct from pool for current round claims
+        ;; Deduct from pool: current-round uses live var, past rounds use snapshot map
         (if is-current
           (var-set mining-shares-pool (- pool-balance actual-payout))
-          false
+          (map-set round-shares-pool round (- pool-balance actual-payout))
         )
 
         ;; Track shares paid (rolling windows + all-time)
@@ -1309,111 +990,6 @@
         )
 
         (ok actual-payout)
-      )
-    )
-  )
-)
-
-;; ---------------------------------------------------------
-;; Public: Claim Mining Shares (dual-token pro-rata)
-;; Pays proportionally from both sBTC and USDCx mining-shares pools.
-;; ---------------------------------------------------------
-
-(define-public (claim-mining-shares-dual
-    (sbtc-token <sip-010-trait>)
-    (usdcx-token <sip-010-trait>)
-    (price-feed-bytes (buff 8192))
-  )
-  (let
-    (
-      (caller tx-sender)
-    )
-    ;; Update round status
-    (check-and-update-round-status)
-
-    (let
-      (
-        (round (var-get current-round))
-        (state (unwrap! (map-get? miner-state { miner: caller, round: round }) ERR-NO-REWARD))
-        (g-mask (var-get global-mask))
-        (u-mask (get mask state))
-        (hashes (get hashes state))
-      )
-      ;; Validate tokens
-      (asserts! (check-token (contract-of sbtc-token)) ERR-INVALID-TOKEN)
-      (asserts! (check-token-usdcx (contract-of usdcx-token)) ERR-INVALID-TOKEN)
-
-      (let
-        (
-          (settled (get pending state))
-          (mask-reward (if (> g-mask u-mask)
-            (/ (* hashes (- g-mask u-mask)) PRECISION)
-            u0
-          ))
-          (reward-sats (+ settled mask-reward))
-        )
-        (asserts! (> reward-sats u0) ERR-NO-REWARD)
-
-        ;; Get oracle price for pro-rata conversion
-        (let
-          (
-            (price-info (try! (update-and-get-btc-price price-feed-bytes)))
-            (btc-price (get price price-info))
-            (abs-expo (get expo price-info))
-            ;; Pool balances
-            (sbtc-pool (var-get mining-shares-pool))
-            (usdcx-pool (var-get mining-shares-pool-usdcx))
-            ;; Convert USDCx pool to sat-equivalent for ratio calculation
-            (usdcx-pool-sats (usdcx-to-sats usdcx-pool btc-price abs-expo))
-            (total-pool-sats (+ sbtc-pool usdcx-pool-sats))
-          )
-          (if (> total-pool-sats u0)
-            (let
-              (
-                ;; Pro-rata: sBTC share of the reward (capped at pool balance)
-                (sbtc-payout-raw (/ (* reward-sats sbtc-pool) total-pool-sats))
-                (sbtc-payout (if (> sbtc-payout-raw sbtc-pool) sbtc-pool sbtc-payout-raw))
-                ;; Remainder goes to USDCx (capped at pool balance)
-                (usdcx-payout-sats (- reward-sats sbtc-payout))
-                (usdcx-payout-raw (sats-to-usdcx usdcx-payout-sats btc-price abs-expo))
-                (usdcx-payout (if (> usdcx-payout-raw usdcx-pool) usdcx-pool usdcx-payout-raw))
-              )
-              ;; Pay sBTC portion
-              (if (> sbtc-payout u0)
-                (begin
-                  (try! (vault-withdraw sbtc-token caller sbtc-payout))
-                  (var-set mining-shares-pool (- sbtc-pool sbtc-payout))
-                )
-                false
-              )
-              ;; Pay USDCx portion
-              (if (> usdcx-payout u0)
-                (begin
-                  (try! (vault-withdraw usdcx-token caller usdcx-payout))
-                  (var-set mining-shares-pool-usdcx (- usdcx-pool usdcx-payout))
-                )
-                false
-              )
-
-              ;; Track shares paid
-              (record-shares-paid reward-sats)
-
-              ;; Track total withdrawn
-              (map-set total-withdrawn caller
-                (+ (default-to u0 (map-get? total-withdrawn caller)) reward-sats)
-              )
-
-              ;; Update miner state
-              (map-set miner-state { miner: caller, round: round }
-                (merge state { mask: g-mask, pending: u0 })
-              )
-
-              (ok { sbtc-payout: sbtc-payout, usdcx-payout: usdcx-payout, total-sats: reward-sats })
-            )
-            ;; Pool is empty
-            ERR-NO-REWARD
-          )
-        )
       )
     )
   )
@@ -1454,14 +1030,14 @@
           (dev-amount (/ (* reward-pool u200) BASIS))
           (remaining (/ (* reward-pool u5000) BASIS))
 
-          ;; Remaining split depends on winner's rig
+          ;; Remaining 50% split depends on winner's rig (must sum to BASIS = 10000)
           (rig-split (if (is-eq rig RIG-CPU)
-            { next-round: u1000, shares: u2500, token-holders: u1500 }
+            { next-round: u2000, shares: u5000, token-holders: u3000 }
             (if (is-eq rig RIG-GPU)
-              { next-round: u1500, shares: u3000, token-holders: u500 }
+              { next-round: u3000, shares: u6000, token-holders: u1000 }
               (if (is-eq rig RIG-FPGA)
-                { next-round: u2000, shares: u2000, token-holders: u1000 }
-                { next-round: u2000, shares: u2500, token-holders: u500 }
+                { next-round: u4000, shares: u4000, token-holders: u2000 }
+                { next-round: u4000, shares: u5000, token-holders: u1000 }
               )
             )
           ))
@@ -1498,131 +1074,6 @@
 )
 
 ;; ---------------------------------------------------------
-;; Public: Claim Mining Reward (winner, dual-token pro-rata)
-;; ---------------------------------------------------------
-
-(define-public (claim-mining-reward-dual
-    (sbtc-token <sip-010-trait>)
-    (usdcx-token <sip-010-trait>)
-    (price-feed-bytes (buff 8192))
-  )
-  (let
-    (
-      (caller tx-sender)
-    )
-    (check-and-update-round-status)
-
-    (let
-      (
-        (winner (unwrap! (var-get last-miner) ERR-NOT-WINNER))
-        (round (var-get current-round))
-        (winner-state (unwrap! (map-get? miner-state { miner: winner, round: round }) ERR-NOT-WINNER))
-        (rig (get rig winner-state))
-        (reward-pool-sbtc (var-get mining-reward-pool))
-        (reward-pool-usdcx (var-get mining-reward-pool-usdcx))
-      )
-      (asserts! (check-token (contract-of sbtc-token)) ERR-INVALID-TOKEN)
-      (asserts! (check-token-usdcx (contract-of usdcx-token)) ERR-INVALID-TOKEN)
-      (asserts! (is-eq (var-get game-state) STATE-COOLDOWN) ERR-GAME-NOT-COOLDOWN)
-      (asserts! (is-eq caller winner) ERR-NOT-WINNER)
-      (asserts! (or (> reward-pool-sbtc u0) (> reward-pool-usdcx u0)) ERR-NO-REWARD)
-
-      (let
-        (
-          ;; Winner gets 48%, dev gets 2%, remaining 50% split by rig type
-          ;; sBTC portion
-          (winner-sbtc (/ (* reward-pool-sbtc u4800) BASIS))
-          (dev-sbtc (/ (* reward-pool-sbtc u200) BASIS))
-          (remaining-sbtc (/ (* reward-pool-sbtc u5000) BASIS))
-          ;; USDCx portion
-          (winner-usdcx (/ (* reward-pool-usdcx u4800) BASIS))
-          (dev-usdcx (/ (* reward-pool-usdcx u200) BASIS))
-          (remaining-usdcx (/ (* reward-pool-usdcx u5000) BASIS))
-
-          (rig-split (if (is-eq rig RIG-CPU)
-            { next-round: u1000, shares: u2500, token-holders: u1500 }
-            (if (is-eq rig RIG-GPU)
-              { next-round: u1500, shares: u3000, token-holders: u500 }
-              (if (is-eq rig RIG-FPGA)
-                { next-round: u2000, shares: u2000, token-holders: u1000 }
-                { next-round: u2000, shares: u2500, token-holders: u500 }
-              )
-            )
-          ))
-
-          ;; sBTC splits
-          (to-next-sbtc (/ (* remaining-sbtc (get next-round rig-split)) BASIS))
-          (to-shares-sbtc (/ (* remaining-sbtc (get shares rig-split)) BASIS))
-          (to-token-holders-sbtc (/ (* remaining-sbtc (get token-holders rig-split)) BASIS))
-          ;; USDCx splits
-          (to-next-usdcx (/ (* remaining-usdcx (get next-round rig-split)) BASIS))
-          (to-shares-usdcx (/ (* remaining-usdcx (get shares rig-split)) BASIS))
-          (to-token-holders-usdcx (/ (* remaining-usdcx (get token-holders rig-split)) BASIS))
-        )
-
-        ;; Pay winner sBTC
-        (if (> winner-sbtc u0)
-          (try! (vault-withdraw sbtc-token caller winner-sbtc))
-          true
-        )
-        ;; Pay winner USDCx
-        (if (> winner-usdcx u0)
-          (try! (vault-withdraw usdcx-token caller winner-usdcx))
-          true
-        )
-
-        ;; Update sBTC pools
-        (var-set mining-reward-pool u0)
-        (var-set dev-pool (+ (var-get dev-pool) dev-sbtc))
-        (var-set next-round-pool (+ (var-get next-round-pool) to-next-sbtc))
-        (var-set token-holders-pool (+ (var-get token-holders-pool) to-token-holders-sbtc))
-        (var-set mining-shares-pool (+ (var-get mining-shares-pool) to-shares-sbtc))
-
-        ;; Update USDCx pools
-        (var-set mining-reward-pool-usdcx u0)
-        (var-set dev-pool-usdcx (+ (var-get dev-pool-usdcx) dev-usdcx))
-        (var-set next-round-pool-usdcx (+ (var-get next-round-pool-usdcx) to-next-usdcx))
-        (var-set token-holders-pool-usdcx (+ (var-get token-holders-pool-usdcx) to-token-holders-usdcx))
-        (var-set mining-shares-pool-usdcx (+ (var-get mining-shares-pool-usdcx) to-shares-usdcx))
-
-        ;; Update global mask with sat-equivalent shares from both tokens
-        (let
-          (
-            (price-info (try! (update-and-get-btc-price price-feed-bytes)))
-            (btc-price (get price price-info))
-            (abs-expo (get expo price-info))
-            (to-shares-usdcx-sats (usdcx-to-sats to-shares-usdcx btc-price abs-expo))
-            (total-shares-sats (+ to-shares-sbtc to-shares-usdcx-sats))
-            (total (var-get total-hashes))
-            (mask-delta (if (> total u0) (/ (* total-shares-sats PRECISION) total) u0))
-          )
-          (record-shares-earned total-shares-sats)
-          (var-set global-mask (+ (var-get global-mask) mask-delta))
-        )
-
-        (ok { winner-sbtc: winner-sbtc, winner-usdcx: winner-usdcx })
-      )
-    )
-  )
-)
-
-;; ---------------------------------------------------------
-;; Public: Dev Withdraw USDCx
-;; ---------------------------------------------------------
-
-(define-public (dev-withdraw-usdcx (amount uint) (token <sip-010-trait>))
-  (begin
-    (check-and-update-round-status)
-    (asserts! (check-token-usdcx (contract-of token)) ERR-INVALID-TOKEN)
-    (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
-    (asserts! (<= amount (var-get dev-pool-usdcx)) ERR-INSUFFICIENT-PAYMENT)
-    (try! (vault-withdraw token CONTRACT-OWNER amount))
-    (var-set dev-pool-usdcx (- (var-get dev-pool-usdcx) amount))
-    (ok amount)
-  )
-)
-
-;; ---------------------------------------------------------
 ;; Public: Start New Round (after cooldown expires)
 ;; ---------------------------------------------------------
 
@@ -1645,7 +1096,6 @@
 
 (define-public (dev-withdraw (amount uint) (token <sip-010-trait>))
   (begin
-    ;; Update round status based on current block height
     (check-and-update-round-status)
     (asserts! (check-token (contract-of token)) ERR-INVALID-TOKEN)
     (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
@@ -1656,16 +1106,48 @@
   )
 )
 
+(define-public (withdraw-token-holders-pool (amount uint) (token <sip-010-trait>))
+  (begin
+    (check-and-update-round-status)
+    (asserts! (check-token (contract-of token)) ERR-INVALID-TOKEN)
+    (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
+    (asserts! (<= amount (var-get token-holders-pool)) ERR-INSUFFICIENT-PAYMENT)
+    (try! (vault-withdraw token CONTRACT-OWNER amount))
+    (var-set token-holders-pool (- (var-get token-holders-pool) amount))
+    (ok amount)
+  )
+)
+
+(define-public (withdraw-free-hunt-pool (amount uint) (token <sip-010-trait>))
+  (begin
+    (check-and-update-round-status)
+    (asserts! (check-token (contract-of token)) ERR-INVALID-TOKEN)
+    (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
+    (asserts! (<= amount (var-get free-hunt-pool)) ERR-INSUFFICIENT-PAYMENT)
+    (try! (vault-withdraw token CONTRACT-OWNER amount))
+    (var-set free-hunt-pool (- (var-get free-hunt-pool) amount))
+    (ok amount)
+  )
+)
+
+(define-public (withdraw-airdrop-pool (amount uint) (token <sip-010-trait>))
+  (begin
+    (check-and-update-round-status)
+    (asserts! (check-token (contract-of token)) ERR-INVALID-TOKEN)
+    (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
+    (asserts! (<= amount (var-get airdrop-pool)) ERR-INSUFFICIENT-PAYMENT)
+    (try! (vault-withdraw token CONTRACT-OWNER amount))
+    (var-set airdrop-pool (- (var-get airdrop-pool) amount))
+    (ok amount)
+  )
+)
+
 ;; ---------------------------------------------------------
 ;; Read-only: Config getters
 ;; ---------------------------------------------------------
 
 (define-read-only (get-sbtc-principal)
   (var-get sbtc)
-)
-
-(define-read-only (get-usdcx-principal)
-  (var-get usdcx)
 )
 
 (define-read-only (get-referral-fee)
@@ -1748,18 +1230,6 @@
   }
 )
 
-(define-read-only (get-all-pools-usdcx)
-  {
-    mining-reward: (var-get mining-reward-pool-usdcx),
-    mining-shares: (var-get mining-shares-pool-usdcx),
-    token-holders: (var-get token-holders-pool-usdcx),
-    free-hunt: (var-get free-hunt-pool-usdcx),
-    next-round: (var-get next-round-pool-usdcx),
-    airdrop: (var-get airdrop-pool-usdcx),
-    dev: (var-get dev-pool-usdcx)
-  }
-)
-
 (define-read-only (get-global-mask)
   (var-get global-mask)
 )
@@ -1800,10 +1270,6 @@
 
 (define-read-only (get-referral-earnings (who principal))
   (default-to u0 (map-get? referral-earnings who))
-)
-
-(define-read-only (get-referral-earnings-usdcx (who principal))
-  (default-to u0 (map-get? referral-earnings-usdcx who))
 )
 
 (define-read-only (get-total-withdrawn (who principal))
@@ -1854,14 +1320,9 @@
   (default-to u0 (map-get? miner-unclaimed-sbtc who))
 )
 
-(define-read-only (get-miner-unclaimed-usdcx (who principal))
-  (default-to u0 (map-get? miner-unclaimed-usdcx who))
-)
-
 (define-read-only (get-round-unclaimed (round uint))
   {
     sbtc: (default-to u0 (map-get? round-unclaimed-reward round)),
-    usdcx: (default-to u0 (map-get? round-unclaimed-reward-usdcx round)),
     total-hashes: (default-to u0 (map-get? round-total-hashes round))
   }
 )
@@ -1895,8 +1356,12 @@
   (let
     (
       (caller tx-sender)
-      (amount (default-to u0 (map-get? miner-unclaimed-sbtc caller)))
     )
+    (check-and-update-round-status)
+    (let
+      (
+        (amount (default-to u0 (map-get? miner-unclaimed-sbtc caller)))
+      )
     (asserts! (check-token (contract-of token)) ERR-INVALID-TOKEN)
     (asserts! (> amount u0) ERR-NO-REWARD)
     (try! (vault-withdraw token caller amount))
@@ -1904,20 +1369,7 @@
     (map-set total-withdrawn caller
       (+ (default-to u0 (map-get? total-withdrawn caller)) amount))
     (ok amount)
-  )
-)
-
-(define-public (claim-unclaimed-usdcx (token <sip-010-trait>))
-  (let
-    (
-      (caller tx-sender)
-      (amount (default-to u0 (map-get? miner-unclaimed-usdcx caller)))
     )
-    (asserts! (check-token-usdcx (contract-of token)) ERR-INVALID-TOKEN)
-    (asserts! (> amount u0) ERR-NO-REWARD)
-    (try! (vault-withdraw token caller amount))
-    (map-set miner-unclaimed-usdcx caller u0)
-    (ok amount)
   )
 )
 
@@ -1931,14 +1383,6 @@
     ;; Validate: cannot set to the contract itself
     (asserts! (not (is-eq new-sbtc (as-contract tx-sender))) ERR-INVALID-VALUE)
     (ok (var-set sbtc new-sbtc))
-  )
-)
-
-(define-public (set-usdcx (new-usdcx principal))
-  (begin
-    (asserts! (is-eq tx-sender CONTRACT-OWNER) ERR-NOT-AUTHORIZED)
-    (asserts! (not (is-eq new-usdcx (as-contract tx-sender))) ERR-INVALID-VALUE)
-    (ok (var-set usdcx new-usdcx))
   )
 )
 

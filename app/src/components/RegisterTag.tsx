@@ -1,12 +1,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { MINER_TAG_COST, formatSbtc, formatUsdcx } from "../lib/constants";
-import { SbtcIcon, UsdcxIcon } from "./TokenIcons";
-import { registerMinerTag, registerMinerTagUsdcx } from "../lib/stacks";
-import { satsToUsdcx } from "../lib/pyth";
-import { useBtcUsdPrice } from "../hooks/useQueries";
-
-type PayToken = "sbtc" | "usdcx";
+import { MINER_TAG_COST, formatSbtc } from "../lib/constants";
+import { SbtcIcon } from "./TokenIcons";
+import { registerMinerTag } from "../lib/stacks";
 
 interface Props {
   address: string | null;
@@ -23,19 +19,12 @@ const RESERVED_TAGS = new Set([
 export default function RegisterTag({ address, currentTag, onTx }: Props) {
   const [tag, setTag] = useState("");
   const [copied, setCopied] = useState(false);
-  const [payToken, setPayToken] = useState<PayToken>("sbtc");
-
-  const { data: btcUsdPrice } = useBtcUsdPrice(payToken === "usdcx");
 
   const isReserved = RESERVED_TAGS.has(tag.toLowerCase());
 
   function handleRegister() {
     if (!address || tag.length < 3 || isReserved) return;
-    if (payToken === "usdcx") {
-      registerMinerTagUsdcx(tag, onTx);
-    } else {
-      registerMinerTag(tag, onTx);
-    }
+    registerMinerTag(tag, onTx);
   }
 
   function copyReferralLink() {
@@ -70,35 +59,12 @@ export default function RegisterTag({ address, currentTag, onTx }: Props) {
     );
   }
 
-  const feeDisplay = payToken === "usdcx" && btcUsdPrice
-    ? <>{formatUsdcx(satsToUsdcx(MINER_TAG_COST, btcUsdPrice))} <UsdcxIcon /></>
-    : <>{formatSbtc(MINER_TAG_COST)} <SbtcIcon /></>;
-
   return (
     <div className="card register-tag">
       <h2>Register Miner Tag</h2>
 
-      {/* Token selector */}
-      <div className="form-group">
-        <label>Pay With</label>
-        <div className="token-selector">
-          <button
-            className={`btn token-btn ${payToken === "sbtc" ? "token-active" : ""}`}
-            onClick={() => setPayToken("sbtc")}
-          >
-            <img src="/sbtc.png" alt="sBTC" width={18} height={18} className="token-icon" /> sBTC
-          </button>
-          <button
-            className={`btn token-btn ${payToken === "usdcx" ? "token-active" : ""}`}
-            onClick={() => setPayToken("usdcx")}
-          >
-            <img src="/usdc.png" alt="USDCx" width={18} height={18} className="token-icon" /> USDCx
-          </button>
-        </div>
-      </div>
-
       <p className="tag-cost">
-        Cost: {feeDisplay}
+        Cost: {formatSbtc(MINER_TAG_COST)} <SbtcIcon />
       </p>
 
       <div className="form-group">

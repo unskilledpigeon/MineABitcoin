@@ -2,19 +2,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getRoundInfo,
   getSharesStats,
-  getAllPoolsUsdcx,
   getLastMiner,
   getMinerTag,
   getMinerInfo,
   getPendingReward,
   getReferralEarnings,
-  getReferralEarningsUsdcx,
   getTotalWithdrawn,
   getMinerUnclaimedSbtc,
-  getMinerUnclaimedUsdcx,
   priceForNHashes,
 } from "../lib/stacks";
-import { fetchBtcUsdVaa } from "../lib/pyth";
 
 // ---------- Parsing helpers ----------
 
@@ -115,27 +111,6 @@ export function useSharesStats() {
   });
 }
 
-interface UsdcxPools {
-  miningReward: number;
-  miningShares: number;
-  hasAny: boolean;
-}
-
-export function useUsdcxPools() {
-  return useQuery({
-    queryKey: ["usdcxPools"],
-    queryFn: async (): Promise<UsdcxPools> => {
-      const raw = await getAllPoolsUsdcx();
-      const uv = (raw as Record<string, unknown>).value as Record<string, { value: string }>;
-      if (!uv) return { miningReward: 0, miningShares: 0, hasAny: false };
-      const miningReward = Number(uv["mining-reward"].value);
-      const miningShares = Number(uv["mining-shares"].value);
-      const hasAny = Object.values(uv).some((p) => Number(p.value) > 0);
-      return { miningReward, miningShares, hasAny };
-    },
-  });
-}
-
 export function useLastMiner() {
   return useQuery({
     queryKey: ["lastMiner"],
@@ -176,23 +151,19 @@ export function useMinerData(address: string | null, round: number | undefined) 
   return useQuery({
     queryKey: ["minerData", address, round],
     queryFn: async () => {
-      const [rawMiner, rawReward, rawEarnings, rawEarningsUsdcx, rawWithdrawn, rawUnclaimedSbtc, rawUnclaimedUsdcx] = await Promise.all([
+      const [rawMiner, rawReward, rawEarnings, rawWithdrawn, rawUnclaimedSbtc] = await Promise.all([
         getMinerInfo(address!, round!),
         getPendingReward(address!),
         getReferralEarnings(address!),
-        getReferralEarningsUsdcx(address!),
         getTotalWithdrawn(address!),
         getMinerUnclaimedSbtc(address!),
-        getMinerUnclaimedUsdcx(address!),
       ]);
       return {
         minerData: parseMinerInfo(rawMiner as Record<string, unknown>),
         pendingReward: Number((rawReward as { value: string }).value),
         referralEarnings: Number((rawEarnings as { value: string }).value),
-        referralEarningsUsdcx: Number((rawEarningsUsdcx as { value: string }).value),
         totalWithdrawn: Number((rawWithdrawn as { value: string }).value),
         unclaimedSbtc: Number((rawUnclaimedSbtc as { value: string }).value),
-        unclaimedUsdcx: Number((rawUnclaimedUsdcx as { value: string }).value),
       };
     },
     enabled: !!address && round !== undefined,
@@ -212,23 +183,10 @@ export function useHashQuote(hashAmount: number) {
   });
 }
 
-export function useBtcUsdPrice(enabled: boolean) {
-  return useQuery({
-    queryKey: ["btcUsdPrice"],
-    queryFn: async () => {
-      const { btcUsdPrice } = await fetchBtcUsdVaa();
-      return btcUsdPrice;
-    },
-    enabled,
-    refetchInterval: 30_000,
-  });
-}
-
 /** Invalidate all queries after a transaction */
 export function useInvalidateOnTx() {
   const queryClient = useQueryClient();
   return (txId: string) => {
-    // Give the chain a few seconds to process
     setTimeout(() => {
       queryClient.invalidateQueries();
     }, 3000);
@@ -236,4 +194,4 @@ export function useInvalidateOnTx() {
   };
 }
 
-export type { RoundData, SharesStats, MinerData, UsdcxPools };
+export type { RoundData, SharesStats, MinerData };

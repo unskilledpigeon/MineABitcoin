@@ -1,5 +1,5 @@
-import { formatSbtcCompact, formatUsdcx, rigName, roundEra } from "../lib/constants";
-import { SbtcIcon, UsdcxIcon } from "./TokenIcons";
+import { formatSbtcCompact, rigName, roundEra } from "../lib/constants";
+import { SbtcIcon } from "./TokenIcons";
 
 interface RoundData {
   round: number;
@@ -31,8 +31,6 @@ interface Props {
   data: RoundData | null;
   sharesStats: SharesStats | null;
   loading: boolean;
-  usdcxMiningReward: number;
-  usdcxMiningShares: number;
 }
 
 const RIG_COLORS: Record<number, string> = {
@@ -45,7 +43,7 @@ const RIG_COLORS: Record<number, string> = {
 // Game states from contract
 const STATE_ONGOING = 1;
 
-export default function RoundStatus({ data, sharesStats, loading, usdcxMiningReward, usdcxMiningShares }: Props) {
+export default function RoundStatus({ data, sharesStats, loading }: Props) {
   if (loading) return <div className="card">Loading round data...</div>;
   if (!data) return <div className="card">Could not load round data</div>;
 
@@ -86,11 +84,11 @@ export default function RoundStatus({ data, sharesStats, loading, usdcxMiningRew
         </div>
         <div className="stat">
           <span className="stat-label">Reward Pool</span>
-          <span className="stat-value">{formatSbtcCompact(data.miningReward)} <SbtcIcon /> / {formatUsdcx(usdcxMiningReward)} <UsdcxIcon /></span>
+          <span className="stat-value">{formatSbtcCompact(data.miningReward)} <SbtcIcon /></span>
         </div>
         <div className="stat">
           <span className="stat-label">Mining Pool</span>
-          <span className="stat-value">{formatSbtcCompact(data.miningShares)} <SbtcIcon /> / {formatUsdcx(usdcxMiningShares)} <UsdcxIcon /></span>
+          <span className="stat-value">{formatSbtcCompact(data.miningShares)} <SbtcIcon /></span>
         </div>
       </div>
 
