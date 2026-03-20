@@ -67,25 +67,25 @@ export default memo(function MinerDashboard({
               <td className="earnings-label">Total Withdrawn</td>
               <td className="earnings-value">{formatSbtcCompact(totalWithdrawn)} <SbtcIcon /></td>
             </tr>
-            {unclaimedSbtc > 0 && (
-              <tr>
-                <td className="earnings-label">Unclaimed sBTC</td>
-                <td className="earnings-value">{formatSbtcCompact(unclaimedSbtc)} <SbtcIcon /></td>
-              </tr>
-            )}
+            <tr>
+              <td className="earnings-label">Unclaimed sBTC</td>
+              <td className="earnings-value">{formatSbtcCompact(unclaimedSbtc)} <SbtcIcon /></td>
+            </tr>
           </tbody>
         </table>
 
         {connected && (
           <div className="actions">
-            {pendingReward > 0 && (
-              <button className="btn btn-action" onClick={() => claimMiningShares(onTx)}>
-                Claim {formatSbtcCompact(pendingReward)} <SbtcIcon />
-              </button>
-            )}
+            <button
+              className="btn btn-action"
+              disabled={pendingReward === 0}
+              onClick={() => claimMiningShares(onTx)}
+            >
+              Withdraw Earnings {pendingReward > 0 && <>{formatSbtcCompact(pendingReward)} <SbtcIcon /></>}
+            </button>
             {unclaimedSbtc > 0 && (
               <button className="btn btn-action" onClick={() => claimUnclaimedSbtc(onTx)}>
-                Claim {formatSbtcCompact(unclaimedSbtc)} <SbtcIcon />
+                Claim Unclaimed {formatSbtcCompact(unclaimedSbtc)} <SbtcIcon />
               </button>
             )}
             {isCooldown && (
