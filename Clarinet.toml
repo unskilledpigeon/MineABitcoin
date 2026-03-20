@@ -8,7 +8,7 @@ cache_dir = './.cache'
 [[project.requirements]]
 contract_id = 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token'
 
-[contracts.MineABitcoin50000]
+[contracts.MineABitcoinBetaV01]
 path = 'contracts/MineABitcoin.clar'
 clarity_version = 3
 epoch = 'latest'
