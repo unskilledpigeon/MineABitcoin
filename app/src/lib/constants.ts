@@ -105,9 +105,12 @@ export function roundEra(round: number): { name: string; title: string } {
  * e.g. "https://mydomain.com/ram" → "ram"
  * Returns null if no valid referral code is found.
  */
+const RESERVED_PATHS = new Set(["how-to-play", "home", "about", "dashboard", "admin", "api", "app", "login", "signup", "settings", "help", "faq", "terms", "privacy", "leaderboard"]);
+
 export function getReferralFromUrl(): string | null {
   const path = window.location.pathname.replace(/^\/+|\/+$/g, "");
   if (!path || path.includes("/")) return null;
+  if (RESERVED_PATHS.has(path.toLowerCase())) return null;
   // Validate: 3–24 chars, alphanumeric + underscore/hyphen
   if (/^[a-zA-Z0-9_-]{3,24}$/.test(path)) return path;
   return null;

@@ -7,6 +7,7 @@ import BuyHashes from "./components/BuyHashes";
 import RegisterTag from "./components/RegisterTag";
 import MinerDashboard from "./components/MinerDashboard";
 import CooldownOverlay from "./components/CooldownOverlay";
+import HowToPlay from "./pages/HowToPlay";
 import { SbtcIcon } from "./components/TokenIcons";
 import { formatSbtcCompact, heroTagline } from "./lib/constants";
 import { claimMiningReward } from "./lib/stacks";
@@ -58,6 +59,16 @@ function HashRain() {
 }
 
 function App() {
+  const [page, setPage] = useState<"game" | "how-to-play">(() =>
+    window.location.pathname === "/how-to-play" ? "how-to-play" : "game"
+  );
+
+  const navigate = useCallback((to: "game" | "how-to-play") => {
+    const path = to === "how-to-play" ? "/how-to-play" : "/";
+    window.history.pushState({}, "", path);
+    setPage(to);
+  }, []);
+
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     return (localStorage.getItem("theme") as "dark" | "light") || "dark";
   });
@@ -132,6 +143,12 @@ function App() {
         </div>
         <div className="header-actions">
           <button
+            className="btn btn-sm"
+            onClick={() => navigate(page === "how-to-play" ? "game" : "how-to-play")}
+          >
+            {page === "how-to-play" ? "← Game" : "How to Play"}
+          </button>
+          <button
             className="btn btn-sm theme-toggle"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
@@ -146,7 +163,11 @@ function App() {
         </div>
       </header>
 
-      {isCooldown && roundData && (
+      {page === "how-to-play" && (
+        <HowToPlay onBack={() => navigate("game")} />
+      )}
+
+      {page === "game" && isCooldown && roundData && (
         <CooldownOverlay
           winner={lastMiner ?? null}
           jackpot={roundData.miningReward}
@@ -158,7 +179,7 @@ function App() {
       )}
 
       {/* Hero Stats */}
-      {roundData && (
+      {page === "game" && roundData && (
         <section className="hero">
           <div className="hero-tagline">
             {cooldownExpired
@@ -189,11 +210,9 @@ function App() {
         </section>
       )}
 
-      <div className="section-divider">
-        <span>Mining Operations</span>
-      </div>
+      {page === "game" && <div className="section-divider"><span>Mining Operations</span></div>}
 
-      <main className="app-main">
+      {page === "game" && <main className="app-main">
         <div className="left-col">
           <RoundStatus data={roundData ?? null} sharesStats={sharesStats ?? null} loading={roundLoading} />
           <MinerDashboard
@@ -215,7 +234,7 @@ function App() {
           />
           <RegisterTag address={address} currentTag={minerTag ?? null} onTx={handleTx} />
         </div>
-      </main>
+      </main>}
 
       <footer className="app-footer">
         <p>Powered by <span className="accent">Bitcoin</span> on Stacks</p>
