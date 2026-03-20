@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { formatSbtcCompact, rigName, roundEra } from "../lib/constants";
 import { SbtcIcon } from "./TokenIcons";
 
@@ -43,7 +44,7 @@ const RIG_COLORS: Record<number, string> = {
 // Game states from contract
 const STATE_ONGOING = 1;
 
-export default function RoundStatus({ data, sharesStats, loading }: Props) {
+export default memo(function RoundStatus({ data, sharesStats, loading }: Props) {
   if (loading) return <div className="card">Loading round data...</div>;
   if (!data) return <div className="card">Could not load round data</div>;
 
@@ -145,4 +146,4 @@ export default function RoundStatus({ data, sharesStats, loading }: Props) {
 
     </div>
   );
-}
+});

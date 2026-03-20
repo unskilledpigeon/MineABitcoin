@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, memo, type ReactNode } from "react";
 import { RIGS, formatSbtc, getReferralFromUrl } from "../lib/constants";
 import { SbtcIcon } from "./TokenIcons";
 import { buyHashes } from "../lib/stacks";
@@ -18,11 +18,17 @@ interface Props {
   onTx: (txId: string) => void;
 }
 
-export default function BuyHashes({ address, gameOngoing, onTx }: Props) {
+export default memo(function BuyHashes({ address, gameOngoing, onTx }: Props) {
   const [hashAmount, setHashAmount] = useState(0);
   const [rig, setRig] = useState<number>(RIGS.GPU.id);
+  const [debouncedHashAmount, setDebouncedHashAmount] = useState(0);
 
-  const { data: quote, isLoading: quoteLoading } = useHashQuote(hashAmount);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedHashAmount(hashAmount), 400);
+    return () => clearTimeout(timer);
+  }, [hashAmount]);
+
+  const { data: quote, isLoading: quoteLoading } = useHashQuote(debouncedHashAmount);
 
   function handleBuy() {
     if (!address || !quote || hashAmount <= 0) return;
@@ -31,11 +37,11 @@ export default function BuyHashes({ address, gameOngoing, onTx }: Props) {
     buyHashes(hashAmount, rig, maxSbtc, referrer, onTx);
   }
 
-  const perHash = quote !== undefined && quote !== null && hashAmount > 0
-    ? quote / hashAmount
+  const perHash = quote !== undefined && quote !== null && debouncedHashAmount > 0
+    ? quote / debouncedHashAmount
     : null;
 
-  const canBuy = !!address && gameOngoing && hashAmount > 0 && quote != null && !quoteLoading;
+  const canBuy = !!address && gameOngoing && debouncedHashAmount > 0 && quote != null && !quoteLoading;
 
   function getButtonLabel(): ReactNode {
     if (!address) return "Connect Wallet to Mine";
@@ -118,4 +124,4 @@ export default function BuyHashes({ address, gameOngoing, onTx }: Props) {
       </button>
     </div>
   );
-}
+});

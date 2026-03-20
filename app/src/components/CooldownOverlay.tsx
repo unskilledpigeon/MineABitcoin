@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { formatSbtcCompact, roundEra } from "../lib/constants";
 import { SbtcIcon } from "./TokenIcons";
 
@@ -10,7 +11,7 @@ interface Props {
   onClaimReward: () => void;
 }
 
-export default function CooldownOverlay({
+export default memo(function CooldownOverlay({
   winner,
   jackpot,
   round,
@@ -70,4 +71,4 @@ export default function CooldownOverlay({
       </div>
     </div>
   );
-}
+});

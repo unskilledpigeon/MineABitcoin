@@ -3,6 +3,7 @@ import {
   uintCV,
   stringAsciiCV,
   contractPrincipalCV,
+  principalCV,
   Cl,
   fetchCallReadOnlyFunction,
   cvToJSON,
@@ -64,27 +65,22 @@ export async function getPriceAt(n: number) {
 }
 
 export async function getMinerInfo(address: string, round: number) {
-  const { principalCV } = await import("@stacks/transactions");
   return readOnly("get-miner-info", [principalCV(address), uintCV(round)]);
 }
 
 export async function getMinerTag(address: string) {
-  const { principalCV } = await import("@stacks/transactions");
   return readOnly("get-miner-tag", [principalCV(address)]);
 }
 
 export async function getPendingReward(address: string) {
-  const { principalCV } = await import("@stacks/transactions");
   return readOnly("get-pending-reward", [principalCV(address)]);
 }
 
 export async function getReferralEarnings(address: string) {
-  const { principalCV } = await import("@stacks/transactions");
   return readOnly("get-referral-earnings", [principalCV(address)]);
 }
 
 export async function getTotalWithdrawn(address: string) {
-  const { principalCV } = await import("@stacks/transactions");
   return readOnly("get-total-withdrawn", [principalCV(address)]);
 }
 
@@ -218,7 +214,6 @@ export async function startNewRound(onFinish: (txId: string) => void) {
 // --- Read-only: Unclaimed reward balances ---
 
 export async function getMinerUnclaimedSbtc(address: string) {
-  const { principalCV } = await import("@stacks/transactions");
   return readOnly("get-miner-unclaimed-sbtc", [principalCV(address)]);
 }
 

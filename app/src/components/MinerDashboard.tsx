@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { formatSbtcCompact, rigName } from "../lib/constants";
 import { SbtcIcon } from "./TokenIcons";
 import { claimMiningShares, claimMiningReward, claimUnclaimedSbtc } from "../lib/stacks";
@@ -25,7 +26,7 @@ const RIG_COLORS: Record<number, string> = {
   4: "var(--yellow)",
 };
 
-export default function MinerDashboard({
+export default memo(function MinerDashboard({
   address,
   minerData,
   pendingReward,
@@ -103,4 +104,4 @@ export default function MinerDashboard({
       )}
     </div>
   );
-}
+});

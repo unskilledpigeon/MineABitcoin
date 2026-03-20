@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Toaster } from "sonner";
 import "./App.css";
 import ConnectWallet from "./components/ConnectWallet";
@@ -90,27 +90,35 @@ function App() {
   const totalWithdrawn = minerResult?.totalWithdrawn ?? 0;
   const unclaimedSbtc = minerResult?.unclaimedSbtc ?? 0;
 
-  function handleConnect(addr: string) {
+  const handleConnect = useCallback((addr: string) => {
     setAddress(addr);
     localStorage.setItem("stx-address", addr);
-  }
+  }, []);
 
-  function handleDisconnect() {
+  const handleDisconnect = useCallback(() => {
     setAddress(null);
     localStorage.removeItem("stx-address");
-  }
+  }, []);
 
-  function handleTx(txId: string) {
+  const handleTx = useCallback((txId: string) => {
     invalidateOnTx(txId);
-  }
+  }, [invalidateOnTx]);
 
-  const isOngoing = roundData?.state === STATE_ONGOING && (roundData?.blocksRemaining ?? 0) > 0;
-  const isCooldown = (
-    roundData?.state === STATE_COOLDOWN && (roundData?.cooldownBlocksRemaining ?? 0) > 0
-  ) || (
-    roundData?.state === STATE_ONGOING && roundData?.blocksRemaining === 0
-  );
-  const cooldownExpired = roundData?.state === STATE_COOLDOWN && (roundData?.cooldownBlocksRemaining ?? 0) === 0;
+  const tagline = useMemo(() =>
+    roundData
+      ? heroTagline(roundData.uniqueMiners, roundData.miningReward, roundData.blocksRemaining)
+      : "",
+  [roundData]);
+
+  const { isOngoing, isCooldown, cooldownExpired } = useMemo(() => ({
+    isOngoing: roundData?.state === STATE_ONGOING && (roundData?.blocksRemaining ?? 0) > 0,
+    isCooldown: (
+      roundData?.state === STATE_COOLDOWN && (roundData?.cooldownBlocksRemaining ?? 0) > 0
+    ) || (
+      roundData?.state === STATE_ONGOING && roundData?.blocksRemaining === 0
+    ),
+    cooldownExpired: roundData?.state === STATE_COOLDOWN && (roundData?.cooldownBlocksRemaining ?? 0) === 0,
+  }), [roundData]);
 
   return (
     <div className={`app${isCooldown ? " app-cooldown" : ""}`}>
@@ -155,7 +163,7 @@ function App() {
           <div className="hero-tagline">
             {cooldownExpired
               ? "A fresh battlefield awaits. Be the first to buy hashes and ignite the next war."
-              : heroTagline(roundData.uniqueMiners, roundData.miningReward, roundData.blocksRemaining)
+              : tagline
             }
           </div>
           <div className="hero-stats">

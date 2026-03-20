@@ -1,6 +1,7 @@
 /** Animated SVG rig icons for the mining selector */
+import { memo } from "react";
 
-export function CpuIcon({ active }: { active: boolean }) {
+export const CpuIcon = memo(function CpuIcon({ active }: { active: boolean }) {
   const color = active ? "var(--green)" : "var(--rig-inactive)";
   return (
     <svg className="rig-svg rig-cpu" viewBox="0 0 48 48" width={48} height={48}>
@@ -33,9 +34,9 @@ export function CpuIcon({ active }: { active: boolean }) {
       <circle cx={24} cy={24} r={2.5} fill={color} className="cpu-core" />
     </svg>
   );
-}
+});
 
-export function GpuIcon({ active }: { active: boolean }) {
+export const GpuIcon = memo(function GpuIcon({ active }: { active: boolean }) {
   const color = active ? "var(--blue)" : "var(--rig-inactive)";
   return (
     <svg className="rig-svg rig-gpu" viewBox="0 0 48 48" width={48} height={48}>
@@ -73,9 +74,9 @@ export function GpuIcon({ active }: { active: boolean }) {
       <circle cx={38} cy={32} r={1.2} fill={color} className="gpu-led" />
     </svg>
   );
-}
+});
 
-export function FpgaIcon({ active }: { active: boolean }) {
+export const FpgaIcon = memo(function FpgaIcon({ active }: { active: boolean }) {
   const color = active ? "var(--pink)" : "var(--rig-inactive)";
   return (
     <svg className="rig-svg rig-fpga" viewBox="0 0 48 48" width={48} height={48}>
@@ -108,9 +109,9 @@ export function FpgaIcon({ active }: { active: boolean }) {
       <circle cx={39} cy={39} r={1.2} fill={color} opacity={0.5} />
     </svg>
   );
-}
+});
 
-export function AsicIcon({ active }: { active: boolean }) {
+export const AsicIcon = memo(function AsicIcon({ active }: { active: boolean }) {
   const color = active ? "var(--yellow)" : "var(--rig-inactive)";
   return (
     <svg className="rig-svg rig-asic" viewBox="0 0 48 48" width={48} height={48}>
@@ -143,4 +144,4 @@ export function AsicIcon({ active }: { active: boolean }) {
       <line x1={37.5} y1={26} x2={42.5} y2={26} stroke={color} strokeWidth={0.5} className="asic-fan" style={{ transformOrigin: "40px 26px" }} />
     </svg>
   );
-}
+});

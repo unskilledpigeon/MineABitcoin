@@ -91,6 +91,7 @@ export function useRoundInfo() {
       const raw = await getRoundInfo();
       return parseRoundInfo(raw as Record<string, unknown>);
     },
+    refetchInterval: 30_000,
   });
 }
 
@@ -108,6 +109,7 @@ export function useSharesStats() {
         paidLastDay: Number(sv["paid-last-day"].value),
       } as SharesStats;
     },
+    refetchInterval: 60_000,
   });
 }
 
@@ -125,6 +127,7 @@ export function useLastMiner() {
       }
       return null;
     },
+    refetchInterval: 30_000,
   });
 }
 
@@ -144,6 +147,7 @@ export function useMinerTag(address: string | null) {
       return null;
     },
     enabled: !!address,
+    refetchInterval: false,
   });
 }
 
@@ -167,6 +171,7 @@ export function useMinerData(address: string | null, round: number | undefined) 
       };
     },
     enabled: !!address && round !== undefined,
+    refetchInterval: 45_000,
   });
 }
 
@@ -183,12 +188,14 @@ export function useHashQuote(hashAmount: number) {
   });
 }
 
-/** Invalidate all queries after a transaction */
+/** Invalidate relevant queries after a transaction */
 export function useInvalidateOnTx() {
   const queryClient = useQueryClient();
   return (txId: string) => {
     setTimeout(() => {
-      queryClient.invalidateQueries();
+      queryClient.invalidateQueries({ queryKey: ["roundInfo"] });
+      queryClient.invalidateQueries({ queryKey: ["minerData"] });
+      queryClient.invalidateQueries({ queryKey: ["minerTag"] });
     }, 3000);
     return txId;
   };

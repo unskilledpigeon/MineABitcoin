@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { toast } from "sonner";
 import { MINER_TAG_COST, formatSbtc } from "../lib/constants";
 import { SbtcIcon } from "./TokenIcons";
@@ -16,7 +16,7 @@ const RESERVED_TAGS = new Set([
   "privacy", "leaderboard",
 ]);
 
-export default function RegisterTag({ address, currentTag, onTx }: Props) {
+export default memo(function RegisterTag({ address, currentTag, onTx }: Props) {
   const [tag, setTag] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -98,4 +98,4 @@ export default function RegisterTag({ address, currentTag, onTx }: Props) {
       </button>
     </div>
   );
-}
+});
