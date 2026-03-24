@@ -1,5 +1,5 @@
 // Contract constants matching MineABitcoin.clar
-export const CONTRACT_ADDRESS = "ST335MJXYFEEYA9KN66VBSB73QQV8CCP5D3C0WKQ3";
+export const CONTRACT_ADDRESS = "ST2RWQ62MFKSFSG7KNTFH90TQGVD35FE3KA6Y5BJQ";
 export const CONTRACT_NAME = "MineABitcoinBetaV01";
 export const SBTC_CONTRACT = "ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-token";
 // Game states
@@ -18,7 +18,7 @@ export const RIGS = {
 export const PRICE_BASE = 547;
 export const PRICE_CEILING = 100_000;
 export const HASHES_CEILING = 200_000;
-export const BLOCKS_PER_ROUND = 1008;
+export const BLOCKS_PER_ROUND = 3024;
 export const MINER_TAG_COST = 10_000;
 
 // sBTC has 8 decimal places (like sBTC)

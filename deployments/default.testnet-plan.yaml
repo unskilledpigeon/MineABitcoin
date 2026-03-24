@@ -7,8 +7,10 @@ plan:
   batches:
   - id: 0
     transactions:
+    # sBTC contracts are already deployed on testnet; publish them here so Clarinet
+    # can resolve the requirement and validate the contract locally before broadcast.
     - transaction-type: requirement-publish
-      contract-id: SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-registry
+      contract-id: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-registry
       remap-sender: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
       remap-principals:
         SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
@@ -16,7 +18,7 @@ plan:
       path: .cache/requirements/SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-registry.clar
       clarity-version: 3
     - transaction-type: requirement-publish
-      contract-id: SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+      contract-id: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-token
       remap-sender: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
       remap-principals:
         SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
@@ -24,7 +26,7 @@ plan:
       path: .cache/requirements/SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token.clar
       clarity-version: 3
     - transaction-type: requirement-publish
-      contract-id: SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-deposit
+      contract-id: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-deposit
       remap-sender: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
       remap-principals:
         SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4: ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT
@@ -34,25 +36,17 @@ plan:
     epoch: '3.0'
   - id: 1
     transactions:
+    # Deploy the main game contract.
+    # Replace ST2RWQ62MFKSFSG7KNTFH90TQGVD35FE3KA6Y5BJQ with your testnet STX address before running:
+    #   clarinet deployments apply --testnet
     - transaction-type: contract-publish
-      contract-name: mock-pyth-oracle
-      expected-sender: ST1NCN5GS9GGYX619EC61DRQESDQTFX4ZNAVZ1PCY
-      cost: 18530
-      path: contracts/mock-pyth-oracle.clar
-      anchor-block-only: true
-      clarity-version: 3
-    - transaction-type: contract-publish
-      contract-name: MineABitcoin50000
-      expected-sender: ST1NCN5GS9GGYX619EC61DRQESDQTFX4ZNAVZ1PCY
-      cost: 707290
+      contract-name: MineABitcoin
+      expected-sender: ST2RWQ62MFKSFSG7KNTFH90TQGVD35FE3KA6Y5BJQ
+      cost: 750000
       path: contracts/MineABitcoin.clar
       anchor-block-only: true
       clarity-version: 3
-    - transaction-type: contract-publish
-      contract-name: mock-usdcx-token
-      expected-sender: ST1NCN5GS9GGYX619EC61DRQESDQTFX4ZNAVZ1PCY
-      cost: 13850
-      path: contracts/mock-usdcx-token.clar
-      anchor-block-only: true
-      clarity-version: 3
     epoch: '3.3'
+  # NOTE: The contract's default sbtc var already points to the testnet sBTC address
+  # (ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-token), so no set-sbtc call
+  # is needed on testnet.

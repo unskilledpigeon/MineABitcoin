@@ -91,7 +91,7 @@ export function useRoundInfo() {
       const raw = await getRoundInfo();
       return parseRoundInfo(raw as Record<string, unknown>);
     },
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -109,7 +109,7 @@ export function useSharesStats() {
         paidLastDay: Number(sv["paid-last-day"].value),
       } as SharesStats;
     },
-    refetchInterval: 60_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -127,7 +127,7 @@ export function useLastMiner() {
       }
       return null;
     },
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -171,7 +171,7 @@ export function useMinerData(address: string | null, round: number | undefined) 
       };
     },
     enabled: !!address && round !== undefined,
-    refetchInterval: 45_000,
+    refetchInterval: 15_000,
   });
 }
 

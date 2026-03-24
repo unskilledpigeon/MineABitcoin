@@ -89,8 +89,8 @@
 ;; Referral code registration fee (in sats)
 (define-data-var referral-fee uint u10000)
 
-;; Round duration in Bitcoin blocks (default: 1008 = ~7 days)
-(define-data-var blocks-per-round uint u1008)
+;; Round duration in Bitcoin blocks (default: 3024 = ~21 days)
+(define-data-var blocks-per-round uint u3024)
 
 ;; Cooldown duration in Bitcoin blocks (default: 72 = ~12 hours)
 (define-data-var cooldown-blocks uint u72)
@@ -305,14 +305,22 @@
       (start-height (var-get round-start-height))
       (elapsed (- burn-block-height start-height))
     )
-    ;; ONGOING = COOLDOWN transition: round time ran out
+    ;; ONGOING -> COOLDOWN transition: round time ran out
     (if (and (is-eq (var-get game-state) STATE-ONGOING) (>= elapsed effective-duration))
-      (begin
+      (let
+        (
+          (cooldown-start (+ start-height effective-duration))
+        )
         (var-set game-state STATE-COOLDOWN)
-        (var-set cooldown-start-height (+ start-height effective-duration))
-        true
+        (var-set cooldown-start-height cooldown-start)
+        ;; If cooldown has also already expired (no interaction during cooldown),
+        ;; immediately start the new round in the same call.
+        (if (>= burn-block-height (+ cooldown-start (var-get cooldown-blocks)))
+          (reset-round-state)
+          true
+        )
       )
-      ;; COOLDOWN = ONGOING transition: cooldown period expired, auto-start new round
+      ;; COOLDOWN -> ONGOING transition: cooldown period expired, auto-start new round
       (if (and (is-eq (var-get game-state) STATE-COOLDOWN)
                (>= burn-block-height (+ (var-get cooldown-start-height) (var-get cooldown-blocks))))
         (reset-round-state)

@@ -1,0 +1,33 @@
+id: 0
+name: Mainnet deployment
+network: mainnet
+stacks-node: https://api.hiro.so
+bitcoin-node: http://blockstack:blockstacksystem@bitcoind.mainnet.stacks.co:8332
+plan:
+  batches:
+  - id: 0
+    transactions:
+    # Deploy the main game contract.
+    # Replace ST2RWQ62MFKSFSG7KNTFH90TQGVD35FE3KA6Y5BJQ with your mainnet STX address before running:
+    #   clarinet deployments apply --mainnet
+    - transaction-type: contract-publish
+      contract-name: MineABitcoin
+      expected-sender: ST2RWQ62MFKSFSG7KNTFH90TQGVD35FE3KA6Y5BJQ
+      cost: 750000
+      path: contracts/MineABitcoin.clar
+      anchor-block-only: true
+      clarity-version: 3
+    epoch: '3.3'
+  - id: 1
+    transactions:
+    # After deploy confirms, update the sBTC principal to the mainnet sBTC contract.
+    # The default in the contract points to testnet; this corrects it for mainnet.
+    - transaction-type: contract-call
+      contract-id: ST2RWQ62MFKSFSG7KNTFH90TQGVD35FE3KA6Y5BJQ.MineABitcoin
+      expected-sender: ST2RWQ62MFKSFSG7KNTFH90TQGVD35FE3KA6Y5BJQ
+      method: set-sbtc
+      parameters:
+        - value: "'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
+      cost: 10000
+      anchor-block-only: true
+    epoch: '3.3'
