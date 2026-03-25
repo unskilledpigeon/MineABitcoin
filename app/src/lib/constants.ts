@@ -1,6 +1,6 @@
 // Contract constants matching MineABitcoin.clar
 export const CONTRACT_ADDRESS = "ST2RWQ62MFKSFSG7KNTFH90TQGVD35FE3KA6Y5BJQ";
-export const CONTRACT_NAME = "MineABitcoinBetaV01";
+export const CONTRACT_NAME = "MineABitcoinBetaV1";
 export const SBTC_CONTRACT = "ST1F7QA2MDF17S807EPA36TSS8AMEFY4KA9TVGWXT.sbtc-token";
 // Game states
 export const STATE_ONGOING = 1;

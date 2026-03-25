@@ -44,7 +44,6 @@
 (define-constant ERR-INVALID-TOKEN (err u1016))
 (define-constant ERR-ROUND-ENDED (err u1017))
 (define-constant ERR-INVALID-VALUE (err u1018))
-(define-constant ERR-RIG-LOCKED (err u1019))
 
 
 ;; Game states
@@ -183,6 +182,9 @@
 
 ;; Referral mapping: miner -> referrer principal (permanent once set)
 (define-map miner-referrer principal principal)
+
+;; Rig choice: miner -> rig type (permanent once set - cannot change across rounds)
+(define-map player-rig principal uint)
 
 ;; Referral earnings (cumulative tracking - paid directly on each buy)
 (define-map referral-earnings principal uint)
@@ -830,8 +832,6 @@
       (asserts! (> (compute-blocks-remaining) u0) ERR-ROUND-ENDED)
       (asserts! (> hash-amount u0) ERR-ZERO-HASHES)
       (asserts! (or (is-eq rig RIG-CPU) (or (is-eq rig RIG-GPU) (or (is-eq rig RIG-FPGA) (is-eq rig RIG-ASIC)))) ERR-INVALID-RIG)
-      ;; Rig type locked per miner per round - cannot switch after first buy
-      (asserts! (match existing state (is-eq rig (get rig state)) true) ERR-RIG-LOCKED)
       ;; Slippage protection
       (asserts! (<= cost max-sbtc) ERR-INSUFFICIENT-PAYMENT)
 
@@ -905,6 +905,9 @@
             pending: settled-pending
           }
         )
+
+        ;; Track last rig chosen by player (updated on every buy)
+        (map-set player-rig caller rig)
 
         ;; Increment unique miners if new
         (if is-new
@@ -1184,6 +1187,10 @@
 
 (define-read-only (get-miner-info (who principal) (round uint))
   (map-get? miner-state { miner: who, round: round })
+)
+
+(define-read-only (get-player-rig (who principal))
+  (map-get? player-rig who)
 )
 
 (define-read-only (get-miner-referrer (who principal))

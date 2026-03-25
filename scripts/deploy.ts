@@ -57,7 +57,7 @@ const DEFAULT_API_URL = IS_MAINNET
   : "https://api.testnet.hiro.so";
 
 const API_URL = process.env.STACKS_API_URL ?? DEFAULT_API_URL;
-const CONTRACT_NAME = process.env.CONTRACT_NAME ?? "MineABitcoinBetaV01";
+const CONTRACT_NAME = process.env.CONTRACT_NAME ?? "MineABitcoinBetaV1";
 
 const network = IS_MAINNET
   ? { ...STACKS_MAINNET, client: { baseUrl: API_URL } }
@@ -74,15 +74,9 @@ if (!mnemonic) {
 }
 
 async function getDeployerKey(): Promise<{ privateKey: string; address: string }> {
-  const { TransactionVersion } = await import("@stacks/network");
   const wallet = await generateWallet({ secretKey: mnemonic!, password: "" });
   const account = wallet.accounts[0];
-  const address = getStxAddress({
-    account,
-    transactionVersion: IS_MAINNET
-      ? TransactionVersion.Mainnet
-      : TransactionVersion.Testnet,
-  });
+  const address = getStxAddress(account, IS_MAINNET ? "mainnet" : "testnet");
   return { privateKey: account.stxPrivateKey, address };
 }
 
